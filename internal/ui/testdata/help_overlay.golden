@@ -1,0 +1,40 @@
+  Help — Keybindings                                                                                                    
+                                                                                                                        
+  NAVIGATION                                                                                                            
+    j / Down  Move selection down                                                                                       
+    k / Up    Move selection up                                                                                         
+    g     Go to top                                                                                                     
+    G     Go to bottom                                                                                                  
+    Tab   Switch focus (tree / detail)                                                                                  
+                                                                                                                        
+  TREE                                                                                                                  
+    Enter  Expand node / open overlay (narrow)                                                                          
+    Right Expand node                                                                                                   
+    Left  Collapse node / go to parent                                                                                  
+    e     Expand all nodes                                                                                              
+    c     Collapse all nodes                                                                                            
+                                                                                                                        
+  SEARCH & FILTER                                                                                                       
+    /     Search by ID or title                                                                                         
+    f     Open filter menu                                                                                              
+    Esc   Clear search/filter, close overlay                                                                            
+                                                                                                                        
+  OTHER                                                                                                                 
+    r     Force refresh                                                                                                 
+    ?     Show this help                                                                                                
+    q     Quit                                                                                                          
+                                                                                                                        
+  [Esc/?] Close                                                                                                         
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+[q] Quit  [/] Search  [f] Filter  [?] Help                                                                   Refresh: 2s

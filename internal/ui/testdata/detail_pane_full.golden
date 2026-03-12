@@ -1,0 +1,40 @@
+Beads                                           │ proj-1.1                                                              
+[-] proj-1  epic  (~)                           │ ───────────────────────────────────────────────────────────────────── 
+├── proj-1.1  task  (x)                         │ Title:  Set up CI pipeline                                            
+├── proj-1.2  task  ( )                         │ Type:   task         Status: closed                                   
+└── proj-1.3  task  (!)                         │ Priority: 1          Owner: dev@test.com                              
+proj-2  feat  ( )                               │ Parent: proj-1                                                        
+                                                │ Created: 2026-03-10  Updated: 2026-03-11  Closed: 2026-03-11          
+                                                │ ───────────────────────────────────────────────────────────────────── 
+                                                │                                                                       
+                                                │ DESCRIPTION                                                           
+                                                │ Configure GitHub Actions for CI.                                      
+                                                │                                                                       
+                                                │ Requirements:                                                         
+                                                │ - Build on push                                                       
+                                                │ - Run tests                                                           
+                                                │ - Lint check                                                          
+                                                │                                                                       
+                                                │ DESIGN                                                                
+                                                │ Use `.github/workflows/ci.yml`.                                       
+                                                │   name: CI                                                            
+                                                │   on: push                                                            
+                                                │                                                                       
+                                                │ ACCEPTANCE CRITERIA                                                   
+                                                │ - [ ] CI runs on push                                                 
+                                                │ - [ ] Tests pass                                                      
+                                                │ - [ ] Lint passes                                                     
+                                                │                                                                       
+                                                │ NOTES                                                                 
+                                                │ See docs/ci.md for reference.                                         
+                                                │                                                                       
+                                                │ DEPENDENCIES                                                          
+                                                │   depends on: proj-1                                                  
+                                                │   depended on by: proj-1.2                                            
+                                                │                                                                       
+                                                │                                                                       
+                                                │                                                                       
+                                                │                                                                       
+                                                │                                                                       
+                                                │                                                                       
+[q] Quit  [/] Search  [f] Filter  [?] Help                                                                   Refresh: 2s

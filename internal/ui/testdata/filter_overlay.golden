@@ -1,0 +1,40 @@
+  Filter Beads                                                                                                          
+                                                                                                                        
+  TYPE                                                                                                                  
+    [x] task                                                                                                            
+    [ ] bug                                                                                                             
+    [ ] feature                                                                                                         
+    [ ] chore                                                                                                           
+    [ ] epic                                                                                                            
+    [ ] decision                                                                                                        
+                                                                                                                        
+  STATUS                                                                                                                
+    [x] open                                                                                                            
+    [ ] in_progress                                                                                                     
+    [ ] blocked                                                                                                         
+    [ ] deferred                                                                                                        
+    [ ] closed                                                                                                          
+                                                                                                                        
+  [Space] Toggle  [Enter/f] Apply  [Esc] Clear & Close                                                                  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+Filter: type=task status=open  [Esc] Clear                                                                   Refresh: 2s
