@@ -305,6 +305,224 @@ func TestBuildTree_EmptyInput(t *testing.T) {
 	}
 }
 
+// --- Dependency-aware sort tests ---
+
+func TestSortNodes_IndependentFirst(t *testing.T) {
+	// B depends on A (A blocks B). A should come first.
+	b := []data.Bead{
+		{ID: "b", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "b", DependsOnID: "a", Type: "blocks"},
+		}},
+		{ID: "a", Parent: "p", Priority: 1},
+	}
+
+	m := BuildTree(append([]data.Bead{{ID: "p", Priority: 0}}, b...), false)
+	children := m.Roots[0].Children
+
+	if children[0].Bead.ID != "a" {
+		t.Errorf("expected independent node 'a' first, got %s", children[0].Bead.ID)
+	}
+	if children[1].Bead.ID != "b" {
+		t.Errorf("expected dependent node 'b' second, got %s", children[1].Bead.ID)
+	}
+}
+
+func TestSortNodes_ChainOrder(t *testing.T) {
+	// Chain: c depends on b, b depends on a. Expected: a, b, c.
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "c", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "c", DependsOnID: "b", Type: "blocks"},
+		}},
+		{ID: "a", Parent: "p", Priority: 1},
+		{ID: "b", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "b", DependsOnID: "a", Type: "blocks"},
+		}},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	expected := []string{"a", "b", "c"}
+	for i, exp := range expected {
+		if children[i].Bead.ID != exp {
+			t.Errorf("child[%d]: expected %s, got %s", i, exp, children[i].Bead.ID)
+		}
+	}
+}
+
+func TestSortNodes_CycleFallback(t *testing.T) {
+	// a depends on b, b depends on a — cycle. Should fall back to priority+ID.
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "b", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "b", DependsOnID: "a", Type: "blocks"},
+		}},
+		{ID: "a", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "a", DependsOnID: "b", Type: "blocks"},
+		}},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	// Both in cycle, fall back to ID sort: a before b.
+	if len(children) != 2 {
+		t.Fatalf("expected 2 children, got %d", len(children))
+	}
+	if children[0].Bead.ID != "a" || children[1].Bead.ID != "b" {
+		t.Errorf("expected [a, b] fallback order, got [%s, %s]", children[0].Bead.ID, children[1].Bead.ID)
+	}
+}
+
+func TestSortNodes_MixedDepsAndNoDeps(t *testing.T) {
+	// d depends on b (blocks). a, b, c are independent.
+	// Expected: independent nodes first by priority+ID (a, b, c), then d.
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "d", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "d", DependsOnID: "b", Type: "blocks"},
+		}},
+		{ID: "c", Parent: "p", Priority: 1},
+		{ID: "a", Parent: "p", Priority: 1},
+		{ID: "b", Parent: "p", Priority: 1},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	expected := []string{"a", "b", "c", "d"}
+	for i, exp := range expected {
+		if children[i].Bead.ID != exp {
+			t.Errorf("child[%d]: expected %s, got %s", i, exp, children[i].Bead.ID)
+		}
+	}
+}
+
+func TestSortNodes_CrossParentDepsIgnored(t *testing.T) {
+	// task-2 (under epic-2) depends on task-1 (under epic-1).
+	// This cross-parent dep should NOT affect sort within epic-2's children.
+	b := []data.Bead{
+		{ID: "epic-1", Priority: 1},
+		{ID: "task-1", Parent: "epic-1", Priority: 1},
+		{ID: "epic-2", Priority: 2},
+		{ID: "task-2", Parent: "epic-2", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "task-2", DependsOnID: "task-1", Type: "blocks"},
+		}},
+		{ID: "task-3", Parent: "epic-2", Priority: 1},
+	}
+
+	m := BuildTree(b, false)
+	epic2 := m.ByID["epic-2"]
+
+	// task-1 is not a sibling of task-2, so dep is ignored.
+	// Sort by ID: task-2 before task-3.
+	if epic2.Children[0].Bead.ID != "task-2" {
+		t.Errorf("expected task-2 first (cross-parent dep ignored), got %s", epic2.Children[0].Bead.ID)
+	}
+	if epic2.Children[1].Bead.ID != "task-3" {
+		t.Errorf("expected task-3 second, got %s", epic2.Children[1].Bead.ID)
+	}
+}
+
+func TestSortNodes_NonBlocksTypeIgnored(t *testing.T) {
+	// b has a "relates_to" dependency on a — should be ignored for sort.
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "b", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "b", DependsOnID: "a", Type: "relates_to"},
+		}},
+		{ID: "a", Parent: "p", Priority: 1},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	// No blocks deps, so sort by ID: a, b.
+	if children[0].Bead.ID != "a" || children[1].Bead.ID != "b" {
+		t.Errorf("expected [a, b], got [%s, %s]", children[0].Bead.ID, children[1].Bead.ID)
+	}
+}
+
+func TestSortNodes_PriorityBreaksTiesAmongIndependent(t *testing.T) {
+	// c (priority 1) depends on both a and b. a has priority 2, b has priority 1.
+	// Among independent nodes, b (priority 1) comes before a (priority 2).
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "a", Parent: "p", Priority: 2},
+		{ID: "b", Parent: "p", Priority: 1},
+		{ID: "c", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "c", DependsOnID: "a", Type: "blocks"},
+			{IssueID: "c", DependsOnID: "b", Type: "blocks"},
+		}},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	expected := []string{"b", "a", "c"}
+	for i, exp := range expected {
+		if children[i].Bead.ID != exp {
+			t.Errorf("child[%d]: expected %s, got %s", i, exp, children[i].Bead.ID)
+		}
+	}
+}
+
+func TestSortNodes_RootLevelDeps(t *testing.T) {
+	// Root-level nodes also get dependency-aware sort.
+	b := []data.Bead{
+		{ID: "z", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "z", DependsOnID: "a", Type: "blocks"},
+		}},
+		{ID: "a", Priority: 1},
+	}
+
+	m := BuildTree(b, false)
+
+	if m.Roots[0].Bead.ID != "a" {
+		t.Errorf("expected root 'a' first (blocks z), got %s", m.Roots[0].Bead.ID)
+	}
+	if m.Roots[1].Bead.ID != "z" {
+		t.Errorf("expected root 'z' second, got %s", m.Roots[1].Bead.ID)
+	}
+}
+
+func TestSortNodes_PartialCycle(t *testing.T) {
+	// a and b form a cycle. c depends on a. d is independent.
+	// Expected: d first (independent), then a, b (cycle fallback by ID), then c.
+	b := []data.Bead{
+		{ID: "p", Priority: 0},
+		{ID: "c", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "c", DependsOnID: "a", Type: "blocks"},
+		}},
+		{ID: "b", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "b", DependsOnID: "a", Type: "blocks"},
+		}},
+		{ID: "a", Parent: "p", Priority: 1, Dependencies: []data.Dependency{
+			{IssueID: "a", DependsOnID: "b", Type: "blocks"},
+		}},
+		{ID: "d", Parent: "p", Priority: 1},
+	}
+
+	m := BuildTree(b, false)
+	children := m.Roots[0].Children
+
+	// d is independent, comes first. a and b are in a cycle, appended by ID.
+	// c depends on a (in cycle), also appended.
+	if children[0].Bead.ID != "d" {
+		t.Errorf("expected 'd' first (independent), got %s", children[0].Bead.ID)
+	}
+	// Remaining 3 (a, b, c) are all in/dependent on cycle — sorted by priority+ID.
+	if len(children) != 4 {
+		t.Fatalf("expected 4 children, got %d", len(children))
+	}
+	// a, b, c all have priority 1, so sorted by ID.
+	if children[1].Bead.ID != "a" || children[2].Bead.ID != "b" || children[3].Bead.ID != "c" {
+		t.Errorf("expected [a, b, c] for cycle+dependent fallback, got [%s, %s, %s]",
+			children[1].Bead.ID, children[2].Bead.ID, children[3].Bead.ID)
+	}
+}
+
 func TestBuildTree_MultipleRootsSorted(t *testing.T) {
 	b := beads(
 		bead("z-task", "", 2),
