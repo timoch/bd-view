@@ -1,14 +1,25 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
 )
+
+// beadsLoadedMsg carries the result of a bead list fetch.
+type beadsLoadedMsg struct {
+	beads []data.Bead
+	err   error
+}
+
+// tickMsg signals that the refresh interval has elapsed.
+type tickMsg time.Time
 
 // Config holds TUI configuration from CLI flags.
 type Config struct {
@@ -49,6 +60,10 @@ type Model struct {
 	filterStats  map[string]bool // selected status filters (OR within)
 	filterCursor int            // cursor position in filter menu
 	showHelp     bool           // true when help overlay is shown
+	fetcher      *data.Fetcher  // fetcher for bd CLI data
+	beads        []data.Bead    // current in-memory bead list
+	lastRefresh  time.Time      // time of last successful refresh
+	nowFunc      func() time.Time // for testing; defaults to time.Now
 }
 
 // allTypes lists the bead types in display order.
@@ -81,6 +96,7 @@ func New(cfg Config) Model {
 		config:      cfg,
 		filterTypes: make(map[string]bool),
 		filterStats: make(map[string]bool),
+		nowFunc:     time.Now,
 	}
 	for _, t := range cfg.FilterTypes {
 		m.filterTypes[t] = true
@@ -89,6 +105,11 @@ func New(cfg Config) Model {
 		m.filterStats[s] = true
 	}
 	return m
+}
+
+// SetFetcher sets the data fetcher for refresh operations.
+func (m *Model) SetFetcher(f *data.Fetcher) {
+	m.fetcher = f
 }
 
 // SetTree sets the tree model for rendering.
@@ -117,7 +138,32 @@ func (m *Model) SetSelectedBeadDetail(detail *data.BeadDetail) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	var cmds []tea.Cmd
+	if m.fetcher != nil {
+		cmds = append(cmds, m.fetchBeadsCmd())
+		cmds = append(cmds, m.tickCmd())
+	}
+	return tea.Batch(cmds...)
+}
+
+// fetchBeadsCmd returns a command that fetches the bead list.
+func (m Model) fetchBeadsCmd() tea.Cmd {
+	fetcher := m.fetcher
+	return func() tea.Msg {
+		beads, err := fetcher.ListAll(context.Background())
+		return beadsLoadedMsg{beads: beads, err: err}
+	}
+}
+
+// tickCmd returns a command that sends a tickMsg after the refresh interval.
+func (m Model) tickCmd() tea.Cmd {
+	d := time.Duration(m.config.Refresh) * time.Second
+	if d <= 0 {
+		d = 2 * time.Second
+	}
+	return tea.Tick(d, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -250,7 +296,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showHelp = true
 			return m, nil
 		case "r":
-			// Force refresh: no-op until refresh logic is wired in
+			if m.fetcher != nil {
+				return m, m.fetchBeadsCmd()
+			}
 			return m, nil
 		case "f":
 			if m.focusedPane == treePane {
@@ -318,6 +366,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
+	case beadsLoadedMsg:
+		if msg.err == nil {
+			m.applyRefresh(msg.beads)
+		}
+	case tickMsg:
+		var cmds []tea.Cmd
+		if m.fetcher != nil {
+			cmds = append(cmds, m.fetchBeadsCmd())
+		}
+		cmds = append(cmds, m.tickCmd())
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -596,6 +655,71 @@ func (m *Model) collapseAllNodes() {
 				}
 			}
 		}
+	}
+	m.syncSelectedBead()
+}
+
+// applyRefresh applies new bead data, preserving UI state (selection, scroll, expand/collapse).
+func (m *Model) applyRefresh(newBeads []data.Bead) {
+	now := m.nowFunc()
+	diff := data.DiffBeads(m.beads, newBeads)
+	m.beads = newBeads
+	m.lastRefresh = now
+
+	if !diff.HasChanges() && m.tree != nil {
+		// No changes, nothing to update
+		return
+	}
+
+	// Remember current selection and expand state
+	var selectedID string
+	expandState := make(map[string]bool)
+	if m.tree != nil {
+		visible := m.visibleNodes()
+		if m.selectedIdx < len(visible) && m.selectedIdx >= 0 {
+			selectedID = visible[m.selectedIdx].Bead.ID
+		}
+		for id, node := range m.tree.ByID {
+			expandState[id] = node.Expanded
+		}
+	}
+
+	// Rebuild tree
+	newTree := tree.BuildTree(newBeads, m.config.ExpandAll)
+
+	// Restore expand state
+	for id, expanded := range expandState {
+		if node, ok := newTree.ByID[id]; ok {
+			node.Expanded = expanded
+		}
+	}
+
+	m.tree = newTree
+
+	// Restore selection
+	if selectedID != "" {
+		if _, ok := m.tree.ByID[selectedID]; ok {
+			// Selected bead still exists — find it in visible nodes
+			visible := m.visibleNodes()
+			for i, node := range visible {
+				if node.Bead.ID == selectedID {
+					m.selectedIdx = i
+					m.syncSelectedBead()
+					return
+				}
+			}
+		}
+		// Selected bead was deleted — find nearest neighbor
+		// Try to keep same index position, clamped to range
+	}
+
+	// Fallback: clamp selection
+	visible := m.visibleNodes()
+	if m.selectedIdx >= len(visible) {
+		m.selectedIdx = len(visible) - 1
+	}
+	if m.selectedIdx < 0 {
+		m.selectedIdx = 0
 	}
 	m.syncSelectedBead()
 }
@@ -1197,7 +1321,14 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
-	right := fmt.Sprintf("Refresh: %ds", m.config.Refresh)
+	var right string
+	if !m.lastRefresh.IsZero() {
+		elapsed := m.nowFunc().Sub(m.lastRefresh)
+		secs := int(elapsed.Seconds())
+		right = fmt.Sprintf("Refreshed %ds ago", secs)
+	} else {
+		right = fmt.Sprintf("Refresh: %ds", m.config.Refresh)
+	}
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {

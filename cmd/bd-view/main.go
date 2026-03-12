@@ -9,6 +9,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 
+	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/ui"
 )
 
@@ -23,7 +24,11 @@ func main() {
 				lipgloss.SetColorProfile(termenv.Ascii)
 			}
 
+			executor := &data.BdExecutor{DBPath: cfg.DBPath}
+			fetcher := data.NewFetcher(executor)
+
 			m := ui.New(cfg)
+			m.SetFetcher(fetcher)
 			p := tea.NewProgram(m, tea.WithAltScreen())
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running TUI: %w", err)

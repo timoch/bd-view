@@ -2093,3 +2093,311 @@ func TestHelp_StatusBarShowsHelpHint(t *testing.T) {
 		t.Error("expected status bar to show [?] Help hint")
 	}
 }
+
+// --- Refresh tests ---
+
+func TestRefresh_ApplyRefreshBuildsTree(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "epic", Status: "closed"},
+	}
+	m.applyRefresh(beads)
+
+	if m.tree == nil {
+		t.Fatal("expected tree to be built after refresh")
+	}
+	if len(m.beads) != 2 {
+		t.Errorf("expected 2 beads, got %d", len(m.beads))
+	}
+	if m.lastRefresh.IsZero() {
+		t.Error("expected lastRefresh to be set")
+	}
+}
+
+func TestRefresh_PreservesSelection(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Select second bead
+	m.selectedIdx = 1
+	m.syncSelectedBead()
+
+	// Refresh with same beads (new timestamps to trigger update)
+	t2 := time.Now()
+	newBeads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", UpdatedAt: &t2},
+		{ID: "b-2", IssueType: "task", Status: "open", UpdatedAt: &t2},
+		{ID: "b-3", IssueType: "task", Status: "open", UpdatedAt: &t2},
+	}
+	m.applyRefresh(newBeads)
+
+	if m.selectedBead == nil || m.selectedBead.ID != "b-2" {
+		t.Errorf("expected selection preserved on b-2, got %v", m.selectedBead)
+	}
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx=1, got %d", m.selectedIdx)
+	}
+}
+
+func TestRefresh_SelectionMovesToNeighborOnDelete(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Select last bead
+	m.selectedIdx = 2
+	m.syncSelectedBead()
+
+	// Refresh with b-3 removed
+	newBeads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m.applyRefresh(newBeads)
+
+	if m.selectedBead == nil {
+		t.Fatal("expected selection to fall back to nearest neighbor")
+	}
+	if m.selectedIdx >= 2 {
+		t.Errorf("expected selectedIdx to be clamped, got %d", m.selectedIdx)
+	}
+}
+
+func TestRefresh_PreservesExpandState(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "epic", Status: "open"},
+		{ID: "b-1.1", IssueType: "task", Status: "open", Parent: "b-1"},
+		{ID: "b-2", IssueType: "epic", Status: "open"},
+		{ID: "b-2.1", IssueType: "task", Status: "open", Parent: "b-2"},
+	}
+	m := modelWithTree(beads, false) // all collapsed
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Expand b-1 only
+	m.tree.ToggleExpand("b-1")
+
+	// b-1 should be expanded, b-2 collapsed
+	if !m.tree.ByID["b-1"].Expanded {
+		t.Fatal("b-1 should be expanded before refresh")
+	}
+	if m.tree.ByID["b-2"].Expanded {
+		t.Fatal("b-2 should be collapsed before refresh")
+	}
+
+	// Refresh with same beads
+	t2 := time.Now()
+	newBeads := make([]data.Bead, len(beads))
+	copy(newBeads, beads)
+	for i := range newBeads {
+		newBeads[i].UpdatedAt = &t2
+	}
+	m.applyRefresh(newBeads)
+
+	// Expand state should be preserved
+	if !m.tree.ByID["b-1"].Expanded {
+		t.Error("b-1 should still be expanded after refresh")
+	}
+	if m.tree.ByID["b-2"].Expanded {
+		t.Error("b-2 should still be collapsed after refresh")
+	}
+}
+
+func TestRefresh_NewBeadAppears(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Refresh with a new bead added
+	newBeads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m.applyRefresh(newBeads)
+
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected 2 visible nodes after add, got %d", len(visible))
+	}
+}
+
+func TestRefresh_UpdatedBeadRefreshesDetail(t *testing.T) {
+	t1 := time.Now()
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Old Title", IssueType: "task", Status: "open", UpdatedAt: &t1},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+	m.selectedIdx = 0
+	m.syncSelectedBead()
+
+	// Refresh with updated title
+	t2 := t1.Add(time.Second)
+	newBeads := []data.Bead{
+		{ID: "b-1", Title: "New Title", IssueType: "task", Status: "open", UpdatedAt: &t2},
+	}
+	m.applyRefresh(newBeads)
+
+	if m.selectedBead == nil || m.selectedBead.Title != "New Title" {
+		t.Errorf("expected detail to reflect updated title, got %v", m.selectedBead)
+	}
+}
+
+func TestRefresh_NoChangesPreservesState(t *testing.T) {
+	t1 := time.Now()
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", UpdatedAt: &t1},
+		{ID: "b-2", IssueType: "task", Status: "open", UpdatedAt: &t1},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+	m.selectedIdx = 1
+	m.syncSelectedBead()
+
+	origTree := m.tree
+
+	// Refresh with identical beads
+	m.applyRefresh(beads)
+
+	// Tree should not have been rebuilt
+	if m.tree != origTree {
+		t.Error("expected tree to be unchanged when no diff")
+	}
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx unchanged, got %d", m.selectedIdx)
+	}
+}
+
+func TestRefresh_StatusBarShowsRefreshedAgo(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	baseTime := time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC)
+	m.nowFunc = func() time.Time { return baseTime }
+	m.lastRefresh = baseTime.Add(-5 * time.Second)
+
+	output := m.View()
+	if !strings.Contains(output, "Refreshed 5s ago") {
+		t.Errorf("expected 'Refreshed 5s ago' in status bar, got: %s", output)
+	}
+}
+
+func TestRefresh_StatusBarShowsDefaultBeforeFirstRefresh(t *testing.T) {
+	m := New(Config{Refresh: 3})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	output := m.View()
+	if !strings.Contains(output, "Refresh: 3s") {
+		t.Errorf("expected 'Refresh: 3s' before first refresh, got: %s", output)
+	}
+}
+
+func TestRefresh_BeadsLoadedMsgTriggersApply(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	updated, _ := m.Update(beadsLoadedMsg{beads: beads})
+	m = updated.(Model)
+
+	if m.tree == nil {
+		t.Fatal("expected tree to be built from beadsLoadedMsg")
+	}
+	if len(m.beads) != 1 {
+		t.Errorf("expected 1 bead, got %d", len(m.beads))
+	}
+}
+
+func TestRefresh_BeadsLoadedMsgWithErrorIgnored(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.beads = beads
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Error message should not overwrite existing data
+	updated, _ := m.Update(beadsLoadedMsg{err: fmt.Errorf("connection failed")})
+	m = updated.(Model)
+
+	if m.tree == nil {
+		t.Error("expected existing tree preserved on error")
+	}
+	if len(m.beads) != 1 {
+		t.Errorf("expected beads preserved on error, got %d", len(m.beads))
+	}
+}
+
+func TestRefresh_TickMsgReturnsCmds(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	_, cmd := m.Update(tickMsg(time.Now()))
+	// Without fetcher, tick should still return a tick cmd (for scheduling)
+	if cmd == nil {
+		t.Error("expected tick to return a cmd for next tick")
+	}
+}
+
+func TestRefresh_EmptyToPopulated(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 10, 0, 0, 0, time.UTC) }
+
+	// Start with no beads
+	if m.tree != nil {
+		t.Fatal("expected nil tree initially")
+	}
+
+	// First refresh brings beads
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "epic", Status: "open"},
+		{ID: "b-1.1", IssueType: "task", Status: "open", Parent: "b-1"},
+	}
+	m.applyRefresh(beads)
+
+	if m.tree == nil {
+		t.Fatal("expected tree after refresh")
+	}
+	if m.selectedBead == nil {
+		t.Fatal("expected a bead to be selected")
+	}
+	if m.selectedBead.ID != "b-1" {
+		t.Errorf("expected first bead selected, got %s", m.selectedBead.ID)
+	}
+}
