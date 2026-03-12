@@ -867,7 +867,7 @@ func (m Model) renderTreePanel(width, height int) string {
 
 	var rows []string
 	for i, node := range visible {
-		row := m.renderTreeRow(node, visible)
+		row := m.renderTreeRow(node, visible, width)
 		if i == m.selectedIdx {
 			row = selectedStyle.Render(row)
 		}
@@ -897,7 +897,7 @@ func (m Model) renderTreePanel(width, height int) string {
 }
 
 // renderTreeRow renders a single tree row with indentation, tree chars, and bead info.
-func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node) string {
+func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth int) string {
 	var prefix string
 
 	if node.Depth > 0 {
@@ -936,7 +936,24 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node) string {
 	typeLabel := shortType(node.Bead.IssueType)
 	statusIcon := m.statusIcon(node.Bead.Status)
 
-	return fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, node.Bead.ID, typeLabel, statusIcon)
+	base := fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, node.Bead.ID, typeLabel, statusIcon)
+
+	// Append truncated title if there's enough space
+	if node.Bead.Title != "" && panelWidth > 0 {
+		baseWidth := lipgloss.Width(base)
+		available := panelWidth - baseWidth - 2 // 2 for "  " separator
+		if available >= 10 {
+			title := node.Bead.Title
+			titleRunes := []rune(title)
+			if len(titleRunes) > available {
+				title = string(titleRunes[:available-1]) + "…"
+			}
+			titleStyle := lipgloss.NewStyle().Faint(true)
+			base = base + "  " + titleStyle.Render(title)
+		}
+	}
+
+	return base
 }
 
 // shortType returns abbreviated type labels.

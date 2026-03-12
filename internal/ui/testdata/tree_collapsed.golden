@@ -1,6 +1,6 @@
 Beads                                           │ proj-1                                                                
-[+] proj-1  epic  (~)                           │ ───────────────────────────────────────────────────────────────────── 
-proj-2  feat  ( )                               │ Title:  Epic: Project setup                                           
+[+] proj-1  epic  (~)  Epic: Project setup      │ ───────────────────────────────────────────────────────────────────── 
+proj-2  feat  ( )  Feature: User auth           │ Title:  Epic: Project setup                                           
                                                 │ Type:   epic         Status: in_progress                              
                                                 │ Priority: 0          Owner: dev@test.com                              
                                                 │ Created: 2026-03-10  Updated: 2026-03-11                              
