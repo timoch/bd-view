@@ -48,6 +48,7 @@ type Model struct {
 	filterTypes  map[string]bool // selected type filters (OR within)
 	filterStats  map[string]bool // selected status filters (OR within)
 	filterCursor int            // cursor position in filter menu
+	showHelp     bool           // true when help overlay is shown
 }
 
 // allTypes lists the bead types in display order.
@@ -122,6 +123,17 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Help overlay takes precedence over all other modes
+		if m.showHelp {
+			switch msg.String() {
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			case "esc", "?":
+				m.showHelp = false
+			}
+			return m, nil
+		}
+
 		// In overlay mode, handle overlay-specific keys first
 		if m.showOverlay {
 			switch msg.String() {
@@ -233,6 +245,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "/":
 			m.searching = true
+			return m, nil
+		case "?":
+			m.showHelp = true
+			return m, nil
+		case "r":
+			// Force refresh: no-op until refresh logic is wired in
 			return m, nil
 		case "f":
 			if m.focusedPane == treePane {
@@ -605,6 +623,12 @@ func (m Model) View() string {
 	contentHeight := m.height - lipgloss.Height(statusBar)
 	if contentHeight < 1 {
 		contentHeight = 1
+	}
+
+	// Help overlay
+	if m.showHelp {
+		helpPanel := m.renderHelpOverlay(m.width, contentHeight)
+		return lipgloss.JoinVertical(lipgloss.Left, helpPanel, statusBar)
 	}
 
 	// Filter overlay
@@ -1038,6 +1062,49 @@ func (m Model) colorStatus(status string) string {
 		s = lipgloss.NewStyle()
 	}
 	return s.Render(status)
+}
+
+// renderHelpOverlay renders the help overlay with all keybindings.
+func (m Model) renderHelpOverlay(width, height int) string {
+	style := lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		PaddingLeft(2)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+	keyStyle := lipgloss.NewStyle().Bold(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render("Help — Keybindings"))
+	lines = append(lines, "")
+	lines = append(lines, headingStyle.Render("NAVIGATION"))
+	lines = append(lines, fmt.Sprintf("  %s  Move selection down", keyStyle.Render("j / Down")))
+	lines = append(lines, fmt.Sprintf("  %s    Move selection up", keyStyle.Render("k / Up")))
+	lines = append(lines, fmt.Sprintf("  %s     Go to top", keyStyle.Render("g")))
+	lines = append(lines, fmt.Sprintf("  %s     Go to bottom", keyStyle.Render("G")))
+	lines = append(lines, fmt.Sprintf("  %s   Switch focus (tree / detail)", keyStyle.Render("Tab")))
+	lines = append(lines, "")
+	lines = append(lines, headingStyle.Render("TREE"))
+	lines = append(lines, fmt.Sprintf("  %s  Expand node / open overlay (narrow)", keyStyle.Render("Enter")))
+	lines = append(lines, fmt.Sprintf("  %s Expand node", keyStyle.Render("Right")))
+	lines = append(lines, fmt.Sprintf("  %s  Collapse node / go to parent", keyStyle.Render("Left")))
+	lines = append(lines, fmt.Sprintf("  %s     Expand all nodes", keyStyle.Render("e")))
+	lines = append(lines, fmt.Sprintf("  %s     Collapse all nodes", keyStyle.Render("c")))
+	lines = append(lines, "")
+	lines = append(lines, headingStyle.Render("SEARCH & FILTER"))
+	lines = append(lines, fmt.Sprintf("  %s     Search by ID or title", keyStyle.Render("/")))
+	lines = append(lines, fmt.Sprintf("  %s     Open filter menu", keyStyle.Render("f")))
+	lines = append(lines, fmt.Sprintf("  %s   Clear search/filter, close overlay", keyStyle.Render("Esc")))
+	lines = append(lines, "")
+	lines = append(lines, headingStyle.Render("OTHER"))
+	lines = append(lines, fmt.Sprintf("  %s     Force refresh", keyStyle.Render("r")))
+	lines = append(lines, fmt.Sprintf("  %s     Show this help", keyStyle.Render("?")))
+	lines = append(lines, fmt.Sprintf("  %s     Quit", keyStyle.Render("q")))
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Faint(true).Render("[Esc/?] Close"))
+
+	return style.Render(strings.Join(lines, "\n"))
 }
 
 // renderFilterOverlay renders the filter menu overlay.

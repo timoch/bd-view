@@ -1951,3 +1951,145 @@ func TestFilter_SearchClearsBeforeFilter(t *testing.T) {
 		t.Error("expected filters to be cleared on second Esc")
 	}
 }
+
+// --- Help overlay tests ---
+
+func TestHelp_QuestionMarkOpensHelpOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = updated.(Model)
+
+	if !m.showHelp {
+		t.Error("expected help overlay to be open after pressing ?")
+	}
+}
+
+func TestHelp_OverlayRendersKeybindings(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+
+	output := m.View()
+
+	checks := []string{
+		"Help",
+		"NAVIGATION",
+		"TREE",
+		"SEARCH & FILTER",
+		"OTHER",
+		"j / Down",
+		"k / Up",
+		"Tab",
+		"Enter",
+		"Right",
+		"Left",
+		"Expand all",
+		"Collapse all",
+		"Search by ID",
+		"filter menu",
+		"Force refresh",
+		"Quit",
+	}
+	for _, want := range checks {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected help overlay to contain %q", want)
+		}
+	}
+}
+
+func TestHelp_EscClosesOverlay(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.showHelp {
+		t.Error("expected help overlay to close on Esc")
+	}
+}
+
+func TestHelp_QuestionMarkClosesOverlay(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = updated.(Model)
+
+	if m.showHelp {
+		t.Error("expected ? to close help overlay when already open")
+	}
+}
+
+func TestHelp_OverlayBlocksOtherKeys(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+	m.showHelp = true
+
+	// j should not move selection while help is open
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selection to stay at 0 while help overlay is open, got %d", m.selectedIdx)
+	}
+	if !m.showHelp {
+		t.Error("expected help overlay to remain open for non-close keys")
+	}
+}
+
+func TestHelp_QuitWorksInOverlay(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	if cmd == nil {
+		t.Error("expected quit command when pressing q in help overlay")
+	}
+}
+
+func TestHelp_RKeyDoesNotError(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// r should not panic or change state
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = updated.(Model)
+
+	if m.selectedIdx != 0 {
+		t.Errorf("expected r to be no-op, selectedIdx changed to %d", m.selectedIdx)
+	}
+}
+
+func TestHelp_StatusBarShowsHelpHint(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	output := m.View()
+	if !strings.Contains(output, "[?] Help") {
+		t.Error("expected status bar to show [?] Help hint")
+	}
+}
