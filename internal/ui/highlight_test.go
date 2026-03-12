@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
 )
@@ -51,17 +49,17 @@ func TestHighlightSearchMatches_EmptyText(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_AsciiProfile(t *testing.T) {
-	// In init(), termenv.Ascii is set — highlighting should be no-op
+	// noColorHighlight is set in init() — highlighting should be no-op
 	result := highlightSearchMatches("hello world", "world")
 	if result != "hello world" {
-		t.Errorf("expected unchanged text in Ascii profile, got %q", result)
+		t.Errorf("expected unchanged text when noColorHighlight=true, got %q", result)
 	}
 }
 
 func TestHighlightSearchMatches_FindsMatch(t *testing.T) {
-	// Temporarily set TrueColor profile
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	// Temporarily enable highlighting
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	result := highlightSearchMatches("hello world", "world")
 	if !strings.Contains(result, "world") {
@@ -76,8 +74,8 @@ func TestHighlightSearchMatches_FindsMatch(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_CaseInsensitive(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	result := highlightSearchMatches("Hello World", "hello")
 	// Should highlight "Hello" preserving original case
@@ -92,8 +90,8 @@ func TestHighlightSearchMatches_CaseInsensitive(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_MultipleMatches(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	result := highlightSearchMatches("ab cd ab ef ab", "ab")
 	count := strings.Count(result, "\x1b[48;2;224;175;104m")
@@ -103,8 +101,8 @@ func TestHighlightSearchMatches_MultipleMatches(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_NoMatch(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	result := highlightSearchMatches("hello world", "xyz")
 	if result != "hello world" {
@@ -113,8 +111,8 @@ func TestHighlightSearchMatches_NoMatch(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_SpecialChars(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	// Special regex chars should be treated as literals
 	result := highlightSearchMatches("test (foo) bar", "(foo)")
@@ -128,8 +126,8 @@ func TestHighlightSearchMatches_SpecialChars(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_WithANSICodes(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	// Simulate styled text: "he\x1b[1mllo" — "hello" with bold starting mid-word
 	input := "he\x1b[1mllo world"
@@ -151,8 +149,8 @@ func TestHighlightSearchMatches_WithANSICodes(t *testing.T) {
 }
 
 func TestHighlightSearchMatches_PreservesANSIStructure(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = false
+	defer func() { noColorHighlight = true }()
 
 	// Faint text with a match
 	input := "\x1b[2mhello world\x1b[0m"
@@ -173,7 +171,7 @@ func TestHighlightSearchMatches_PreservesANSIStructure(t *testing.T) {
 
 func TestTreeRow_HighlightsIDOnSearch(t *testing.T) {
 	// This test verifies that renderTreeRow includes the search query text in the ID.
-	// In Ascii profile, highlighting is invisible but the text is present.
+	// With noColorHighlight=true, highlighting is invisible but the text is present.
 	m := New(Config{Refresh: 2})
 	m.width = 120
 	m.height = 40
@@ -220,7 +218,7 @@ func TestDetailPanel_HighlightsTitleOnSearch(t *testing.T) {
 	bead := sampleBeadForHighlight()
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Install SignalR client") {
 		t.Error("expected title with search term in detail pane")
 	}
@@ -237,7 +235,7 @@ func TestDetailPanel_HighlightsDescriptionOnSearch(t *testing.T) {
 	bead.Description = "Set up SignalR connection for real-time updates"
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "connection") {
 		t.Error("expected description with search term in detail pane")
 	}
@@ -256,8 +254,8 @@ func TestHighlight_ClearedWhenSearchCleared(t *testing.T) {
 	// Clear search
 	m.searchQuery = ""
 
-	// Verify no highlighting applied (text unchanged in Ascii mode)
-	output := m.View()
+	// Verify no highlighting applied (text unchanged with noColorHighlight)
+	output := m.viewString()
 	if !strings.Contains(output, "Install SignalR client") {
 		t.Error("expected title present after search cleared")
 	}

@@ -6,15 +6,13 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
 )
 
 func init() {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = true
 }
 
 func TestDetailPanel_EmptyState(t *testing.T) {
@@ -23,7 +21,7 @@ func TestDetailPanel_EmptyState(t *testing.T) {
 	m.height = 40
 	m.ready = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Select a bead to view details") {
 		t.Error("expected empty state message when no bead selected")
 	}
@@ -50,7 +48,7 @@ func TestDetailPanel_ShowsBeadHeader(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 
 	checks := []struct {
 		label string
@@ -87,7 +85,7 @@ func TestDetailPanel_HidesEmptyDates(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 	if strings.Contains(output, "Created:") {
 		t.Error("should not show Created when CreatedAt is nil")
 	}
@@ -110,7 +108,7 @@ func TestDetailPanel_HidesParentWhenEmpty(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 	if strings.Contains(output, "Parent:") {
 		t.Error("should not show Parent when parent is empty")
 	}
@@ -130,7 +128,7 @@ func TestDetailPanel_HasSeparators(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 	// Should have horizontal separators (─ characters)
 	if !strings.Contains(output, "─") {
 		t.Error("expected horizontal separator lines")
@@ -166,7 +164,7 @@ func TestDetailPanel_ShowsBodySections(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 
 	checks := []struct {
 		label string
@@ -205,7 +203,7 @@ func TestDetailPanel_OmitsEmptySections(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 
 	if !strings.Contains(output, "DESCRIPTION") {
 		t.Error("expected DESCRIPTION heading for non-empty section")
@@ -243,7 +241,7 @@ func TestDetailPanel_ShowsDependencies(t *testing.T) {
 		{ID: "child-2"},
 	}
 
-	output := m.View()
+	output := m.viewString()
 
 	if !strings.Contains(output, "DEPENDENCIES") {
 		t.Error("expected DEPENDENCIES heading")
@@ -270,7 +268,7 @@ func TestDetailPanel_NoDependenciesSection(t *testing.T) {
 	}
 	m.SetSelectedBead(bead)
 
-	output := m.View()
+	output := m.viewString()
 
 	if strings.Contains(output, "DEPENDENCIES") {
 		t.Error("should not show DEPENDENCIES heading when no dependencies")
@@ -293,7 +291,7 @@ func TestDetailPanel_Scrolling(t *testing.T) {
 	m.SetSelectedBead(bead)
 
 	// Initially at scroll 0, should show bead ID
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "test-1") {
 		t.Error("expected bead ID at scroll 0")
 	}
@@ -302,7 +300,7 @@ func TestDetailPanel_Scrolling(t *testing.T) {
 	m.focusedPane = detailPane
 	m.detailScroll = 5
 
-	output = m.View()
+	output = m.viewString()
 	// After scrolling, first lines (bead ID) should be scrolled past
 	// Content should still render
 	if !strings.Contains(output, "DESCRIPTION") || !strings.Contains(output, "Line") {
@@ -322,7 +320,7 @@ func TestDetailPanel_TabSwitchesFocus(t *testing.T) {
 	}
 
 	// Simulate Tab key
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 
 	if m.focusedPane != detailPane {
@@ -330,7 +328,7 @@ func TestDetailPanel_TabSwitchesFocus(t *testing.T) {
 	}
 
 	// Tab again should go back
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 
 	if m.focusedPane != treePane {
@@ -506,7 +504,7 @@ func TestTreePanel_Header(t *testing.T) {
 		{ID: "b-1", IssueType: "task", Status: "open"},
 	}, false)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Beads") {
 		t.Error("expected 'Beads' header in tree panel")
 	}
@@ -518,7 +516,7 @@ func TestTreePanel_NoBeads(t *testing.T) {
 	m.height = 40
 	m.ready = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "(no beads loaded)") {
 		t.Error("expected empty state when no tree set")
 	}
@@ -527,7 +525,7 @@ func TestTreePanel_NoBeads(t *testing.T) {
 func TestTreePanel_EmptyTree(t *testing.T) {
 	m := modelWithTree([]data.Bead{}, false)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "(no beads loaded)") {
 		t.Error("expected empty state for empty bead list")
 	}
@@ -543,7 +541,7 @@ func TestTreePanel_ShowsBeadIDTypeStatus(t *testing.T) {
 		{ID: "adr-1", IssueType: "decision", Status: "open"},
 	}, false)
 
-	output := m.View()
+	output := m.viewString()
 
 	checks := []struct {
 		label string
@@ -578,7 +576,7 @@ func TestTreePanel_StatusIcons(t *testing.T) {
 		{ID: "b-5", IssueType: "task", Status: "closed"},
 	}, false)
 
-	output := m.View()
+	output := m.viewString()
 
 	icons := []struct {
 		status string
@@ -604,7 +602,7 @@ func TestTreePanel_SelectedHighlighted(t *testing.T) {
 	}, false)
 
 	// selectedIdx defaults to 0, which is b-1
-	output := m.View()
+	output := m.viewString()
 	// The selected row should contain the bead ID (it's highlighted with Reverse style)
 	if !strings.Contains(output, "b-1") {
 		t.Error("expected selected bead b-1 in output")
@@ -619,14 +617,14 @@ func TestTreePanel_ExpandCollapseIndicators(t *testing.T) {
 
 	// Collapsed
 	m := modelWithTree(beads, false)
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "▶") {
 		t.Error("expected ▶ for collapsed parent")
 	}
 
 	// Expanded
 	m = modelWithTree(beads, true)
-	output = m.View()
+	output = m.viewString()
 	if !strings.Contains(output, "▼") {
 		t.Error("expected ▼ for expanded parent")
 	}
@@ -640,7 +638,7 @@ func TestTreePanel_TreeDrawingChars(t *testing.T) {
 	}
 
 	m := modelWithTree(beads, true)
-	output := m.View()
+	output := m.viewString()
 
 	// Middle child should use ├──
 	if !strings.Contains(output, "├──") {
@@ -659,7 +657,7 @@ func TestTreePanel_ChildrenHiddenWhenCollapsed(t *testing.T) {
 	}
 
 	m := modelWithTree(beads, false)
-	output := m.View()
+	output := m.viewString()
 
 	if !strings.Contains(output, "parent") {
 		t.Error("expected parent visible when collapsed")
@@ -676,7 +674,7 @@ func TestTreePanel_ChildrenVisibleWhenExpanded(t *testing.T) {
 	}
 
 	m := modelWithTree(beads, true)
-	output := m.View()
+	output := m.viewString()
 
 	if !strings.Contains(output, "child-1") {
 		t.Error("expected child visible when parent expanded")
@@ -739,14 +737,14 @@ func TestNavigation_MoveDown(t *testing.T) {
 	}
 
 	// Move down with j
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 	if m.selectedIdx != 1 {
 		t.Errorf("expected selectedIdx 1 after j, got %d", m.selectedIdx)
 	}
 
 	// Move down with down arrow
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(Model)
 	if m.selectedIdx != 2 {
 		t.Errorf("expected selectedIdx 2 after down, got %d", m.selectedIdx)
@@ -763,14 +761,14 @@ func TestNavigation_MoveUp(t *testing.T) {
 	m.selectedIdx = 2
 
 	// Move up with k
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
 	if m.selectedIdx != 1 {
 		t.Errorf("expected selectedIdx 1 after k, got %d", m.selectedIdx)
 	}
 
 	// Move up with up arrow
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
 		t.Errorf("expected selectedIdx 0 after up, got %d", m.selectedIdx)
@@ -786,7 +784,7 @@ func TestNavigation_BoundaryTop(t *testing.T) {
 	m.selectedIdx = 0
 
 	// Move up at top should stay at 0
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
 		t.Errorf("expected selectedIdx 0 at top boundary, got %d", m.selectedIdx)
@@ -802,7 +800,7 @@ func TestNavigation_BoundaryBottom(t *testing.T) {
 	m.selectedIdx = 1
 
 	// Move down at bottom should stay at 1
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 	if m.selectedIdx != 1 {
 		t.Errorf("expected selectedIdx 1 at bottom boundary, got %d", m.selectedIdx)
@@ -825,7 +823,7 @@ func TestNavigation_ExpandCollapse(t *testing.T) {
 	}
 
 	// Press Enter to expand
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	visible = m.tree.FlattenVisible()
@@ -834,7 +832,7 @@ func TestNavigation_ExpandCollapse(t *testing.T) {
 	}
 
 	// Press Left to collapse
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = updated.(Model)
 
 	visible = m.tree.FlattenVisible()
@@ -852,7 +850,7 @@ func TestNavigation_ExpandWithRight(t *testing.T) {
 	m.selectedIdx = 0
 
 	// Press Right to expand
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	m = updated.(Model)
 
 	visible := m.tree.FlattenVisible()
@@ -870,7 +868,7 @@ func TestNavigation_LeftOnChildMovesToParent(t *testing.T) {
 	m.selectedIdx = 1 // on child-1
 
 	// Press Left on child should move to parent
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m = updated.(Model)
 
 	if m.selectedIdx != 0 {
@@ -892,14 +890,14 @@ func TestNavigation_GoToTopBottom(t *testing.T) {
 	m.selectedIdx = 2
 
 	// G goes to bottom
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	m = updated.(Model)
 	if m.selectedIdx != 3 {
 		t.Errorf("expected selectedIdx 3 after G, got %d", m.selectedIdx)
 	}
 
 	// g goes to top
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
 		t.Errorf("expected selectedIdx 0 after g, got %d", m.selectedIdx)
@@ -921,7 +919,7 @@ func TestNavigation_ExpandAll(t *testing.T) {
 	}
 
 	// Press e to expand all
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	m = updated.(Model)
 
 	visible = m.tree.FlattenVisible()
@@ -941,7 +939,7 @@ func TestNavigation_CollapseAll(t *testing.T) {
 	m.selectedIdx = 3               // on child-2
 
 	// Press c to collapse all
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	m = updated.(Model)
 
 	visible := m.tree.FlattenVisible()
@@ -965,7 +963,7 @@ func TestNavigation_DownUpdatesSelectedBead(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 
 	if m.selectedBead == nil || m.selectedBead.ID != "b-2" {
@@ -977,17 +975,17 @@ func TestNavigation_EmptyTree(t *testing.T) {
 	m := modelWithTree([]data.Bead{}, false)
 
 	// These should not crash
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'g', Text: "g"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'G', Text: "G"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
 	_ = updated.(Model)
 }
 
@@ -998,13 +996,13 @@ func TestNavigation_NoTreeSet(t *testing.T) {
 	m.ready = true
 
 	// These should not crash when tree is nil
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	_ = updated.(Model)
 }
 
@@ -1023,7 +1021,7 @@ func TestNavigation_ScrollKeepsSelectionVisible(t *testing.T) {
 
 	// Navigate to the bottom
 	for i := 0; i < 49; i++ {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 		m = updated.(Model)
 	}
 
@@ -1033,7 +1031,7 @@ func TestNavigation_ScrollKeepsSelectionVisible(t *testing.T) {
 	}
 
 	// The rendered output should contain the last bead
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "b-49") {
 		t.Error("expected b-49 to be visible after navigating to bottom")
 	}
@@ -1047,7 +1045,7 @@ func TestTreePanel_NestedHierarchy(t *testing.T) {
 	}
 
 	m := modelWithTree(beads, true)
-	output := m.View()
+	output := m.viewString()
 
 	// All should be visible
 	if !strings.Contains(output, "epic-1") {
@@ -1070,7 +1068,7 @@ func TestLayout_TooSmallTerminal(t *testing.T) {
 	// Too narrow
 	m.width = 79
 	m.height = 30
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Terminal too small") {
 		t.Error("expected too-small message when width < 80")
 	}
@@ -1078,7 +1076,7 @@ func TestLayout_TooSmallTerminal(t *testing.T) {
 	// Too short
 	m.width = 120
 	m.height = 23
-	output = m.View()
+	output = m.viewString()
 	if !strings.Contains(output, "Terminal too small") {
 		t.Error("expected too-small message when height < 24")
 	}
@@ -1086,7 +1084,7 @@ func TestLayout_TooSmallTerminal(t *testing.T) {
 	// Exactly minimum should work
 	m.width = 80
 	m.height = 24
-	output = m.View()
+	output = m.viewString()
 	if strings.Contains(output, "Terminal too small") {
 		t.Error("should not show too-small message at 80x24")
 	}
@@ -1101,7 +1099,7 @@ func TestLayout_NarrowModeHidesDetail(t *testing.T) {
 	m.height = 30
 	m.SetSelectedBead(&beads[0])
 
-	output := m.View()
+	output := m.viewString()
 	// Tree should be visible
 	if !strings.Contains(output, "b-1") {
 		t.Error("expected tree to be visible in narrow mode")
@@ -1122,14 +1120,14 @@ func TestLayout_NarrowModeOverlay(t *testing.T) {
 	m.syncSelectedBead()
 
 	// Press Enter to open overlay
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	if !m.showOverlay {
 		t.Error("expected overlay to be shown after Enter in narrow mode")
 	}
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "b-1") {
 		t.Error("expected bead ID in overlay")
 	}
@@ -1146,7 +1144,7 @@ func TestLayout_NarrowModeEscClosesOverlay(t *testing.T) {
 	m.showOverlay = true
 
 	// Press Escape to close overlay
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.showOverlay {
@@ -1163,7 +1161,7 @@ func TestLayout_WideModeShowsBothPanes(t *testing.T) {
 	m.height = 30
 	m.syncSelectedBead()
 
-	output := m.View()
+	output := m.viewString()
 	// Both tree and detail should be visible
 	if !strings.Contains(output, "Beads") {
 		t.Error("expected tree header in wide mode")
@@ -1183,7 +1181,7 @@ func TestLayout_TabDisabledInNarrowMode(t *testing.T) {
 		t.Fatal("expected initial focus on tree")
 	}
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 
 	if m.focusedPane != treePane {
@@ -1203,14 +1201,14 @@ func TestLayout_FocusSwitching(t *testing.T) {
 	}
 
 	// Tab switches to detail
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 	if m.focusedPane != detailPane {
 		t.Error("expected focus on detail pane after Tab")
 	}
 
 	// Tab switches back
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
 		t.Error("expected focus on tree pane after second Tab")
@@ -1243,14 +1241,14 @@ func TestLayout_OverlayScrolling(t *testing.T) {
 	m.showOverlay = true
 
 	// Scroll down in overlay
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 	if m.detailScroll != 1 {
 		t.Errorf("expected detailScroll 1 after j in overlay, got %d", m.detailScroll)
 	}
 
 	// Scroll up
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
 	if m.detailScroll != 0 {
 		t.Errorf("expected detailScroll 0 after k in overlay, got %d", m.detailScroll)
@@ -1265,7 +1263,7 @@ func TestSearch_SlashOpensSearchMode(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 
 	if !m.searching {
@@ -1282,11 +1280,11 @@ func TestSearch_TypingFiltersTree(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Enter search mode and type "widget"
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 
 	for _, r := range "widget" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1315,10 +1313,10 @@ func TestSearch_CaseInsensitive(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Search for "abc" should match "ABC-1"
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "abc" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1335,10 +1333,10 @@ func TestSearch_MatchesByID(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "f6" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1355,10 +1353,10 @@ func TestSearch_MatchesByDescription(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "database" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1375,10 +1373,10 @@ func TestSearch_MatchesByDesign(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "postgresql" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1395,10 +1393,10 @@ func TestSearch_MatchesByAcceptanceCriteria(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "endpoints" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1415,10 +1413,10 @@ func TestSearch_MatchesByNotes(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "architecture" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1436,10 +1434,10 @@ func TestSearch_AncestorsPreserved(t *testing.T) {
 	}
 	m := modelWithTree(beads, true) // expand all so children are visible
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "Match me" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1467,9 +1465,9 @@ func TestSearch_EscapeClearsSearch(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Enter search and type
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'A', Text: "A"})
 	m = updated.(Model)
 
 	if m.searchQuery != "A" {
@@ -1477,7 +1475,7 @@ func TestSearch_EscapeClearsSearch(t *testing.T) {
 	}
 
 	// Escape clears search and restores full tree
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.searching {
@@ -1501,13 +1499,13 @@ func TestSearch_EnterConfirmsSearch(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Enter search, type, then press Enter
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "Alpha" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	if m.searching {
@@ -1532,17 +1530,17 @@ func TestSearch_EscClearsActiveSearchOutsideSearchMode(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Search, confirm with Enter, then Escape to clear
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "Alpha" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	// Now press Escape to clear the active filter
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.searchQuery != "" {
@@ -1560,10 +1558,10 @@ func TestSearch_BackspaceRemovesChar(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "xyz" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
@@ -1571,7 +1569,7 @@ func TestSearch_BackspaceRemovesChar(t *testing.T) {
 		t.Fatalf("expected query 'xyz', got %q", m.searchQuery)
 	}
 
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	m = updated.(Model)
 
 	if m.searchQuery != "xy" {
@@ -1586,17 +1584,17 @@ func TestSearch_EmptyResultsMessage(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Search for something that doesn't exist
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "zzzzz" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 	// Confirm search
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "(no matching beads)") {
 		t.Error("expected 'no matching beads' message for empty search results")
 	}
@@ -1609,24 +1607,24 @@ func TestSearch_StatusBarShowsQuery(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Enter search mode
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "test" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
 
 	// While in search mode, status bar should show search prompt
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Search: test") {
 		t.Error("expected status bar to show 'Search: test' during search input")
 	}
 
 	// Confirm search
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
-	output = m.View()
+	output = m.viewString()
 	if !strings.Contains(output, `"test"`) {
 		t.Error("expected status bar to show active search query after confirming")
 	}
@@ -1641,13 +1639,13 @@ func TestSearch_NavigationWorksWhileFiltered(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Search for "Alpha"
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 	for _, r := range "Alpha" {
-		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		updated, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 		m = updated.(Model)
 	}
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	// Should have 2 results, navigate between them
@@ -1655,7 +1653,7 @@ func TestSearch_NavigationWorksWhileFiltered(t *testing.T) {
 		t.Fatalf("expected selectedIdx 0, got %d", m.selectedIdx)
 	}
 
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 
 	if m.selectedIdx != 1 {
@@ -1674,11 +1672,11 @@ func TestSearch_KeysIgnoredDuringSearchInput(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Enter search mode
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = updated.(Model)
 
 	// Pressing 'j' should add to query, not navigate
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 
 	if m.searchQuery != "j" {
@@ -1700,7 +1698,7 @@ func TestLayout_RightExpandsInNarrowMode(t *testing.T) {
 	m.height = 30
 
 	// Right should expand, not open overlay
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	m = updated.(Model)
 
 	if m.showOverlay {
@@ -1720,7 +1718,7 @@ func TestFilter_FOpensFilterOverlay(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	m = updated.(Model)
 
 	if !m.filtering {
@@ -1735,7 +1733,7 @@ func TestFilter_OverlayRendersTypesAndStatuses(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.filtering = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Filter Beads") {
 		t.Error("expected filter overlay title")
 	}
@@ -1763,7 +1761,7 @@ func TestFilter_SpaceTogglesSelection(t *testing.T) {
 	m.filterCursor = 0 // "task" is first item
 
 	// Toggle task on
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = updated.(Model)
 
 	if !m.filterTypes["task"] {
@@ -1771,7 +1769,7 @@ func TestFilter_SpaceTogglesSelection(t *testing.T) {
 	}
 
 	// Toggle task off
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = updated.(Model)
 
 	if m.filterTypes["task"] {
@@ -1788,14 +1786,14 @@ func TestFilter_NavigateFilterMenu(t *testing.T) {
 	m.filterCursor = 0
 
 	// Move down
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 	if m.filterCursor != 1 {
 		t.Errorf("expected cursor at 1 after j, got %d", m.filterCursor)
 	}
 
 	// Move up
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
 	if m.filterCursor != 0 {
 		t.Errorf("expected cursor at 0 after k, got %d", m.filterCursor)
@@ -1809,7 +1807,7 @@ func TestFilter_EnterClosesOverlay(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.filtering = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 
 	if m.filtering {
@@ -1826,7 +1824,7 @@ func TestFilter_EscClearsFiltersAndCloses(t *testing.T) {
 	m.filtering = true
 	m.filterTypes["task"] = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.filtering {
@@ -1944,7 +1942,7 @@ func TestFilter_StatusBarShowsActiveFilter(t *testing.T) {
 	m.filterTypes["task"] = true
 	m.filterStats["open"] = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Filter: type=task status=open") {
 		t.Error("expected status bar to show active filter")
 	}
@@ -1959,7 +1957,7 @@ func TestFilter_EscClearsActiveFiltersOutsideOverlay(t *testing.T) {
 	m.filterTypes["task"] = true
 
 	// Not in filter overlay, press Esc
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.hasActiveFilters() {
@@ -1978,7 +1976,7 @@ func TestFilter_EmptyResultsMessage(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.filterTypes["bug"] = true // no bugs exist
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "(no matching beads)") {
 		t.Error("expected 'no matching beads' when filter produces no results")
 	}
@@ -2030,7 +2028,7 @@ func TestFilter_FClosesOverlayToo(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.filtering = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	m = updated.(Model)
 
 	if m.filtering {
@@ -2047,7 +2045,7 @@ func TestFilter_ToggleStatusInOverlay(t *testing.T) {
 	// Navigate to first status item (after 6 type items)
 	m.filterCursor = len(allTypes) // first status item
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	m = updated.(Model)
 
 	if !m.filterStats["open"] {
@@ -2066,7 +2064,7 @@ func TestFilter_SearchClearsBeforeFilter(t *testing.T) {
 	m.searchQuery = "b-1"
 
 	// First Esc clears search
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 	if m.searchQuery != "" {
 		t.Error("expected search to be cleared first")
@@ -2076,7 +2074,7 @@ func TestFilter_SearchClearsBeforeFilter(t *testing.T) {
 	}
 
 	// Second Esc clears filters
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 	if m.hasActiveFilters() {
 		t.Error("expected filters to be cleared on second Esc")
@@ -2091,7 +2089,7 @@ func TestHelp_QuestionMarkOpensHelpOverlay(t *testing.T) {
 	}
 	m := modelWithTree(beads, false)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	m = updated.(Model)
 
 	if !m.showHelp {
@@ -2106,7 +2104,7 @@ func TestHelp_OverlayRendersKeybindings(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	output := m.View()
+	output := m.viewString()
 
 	checks := []string{
 		"Help",
@@ -2141,7 +2139,7 @@ func TestHelp_EscClosesOverlay(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.showHelp {
@@ -2156,7 +2154,7 @@ func TestHelp_QuestionMarkClosesOverlay(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	m = updated.(Model)
 
 	if m.showHelp {
@@ -2173,7 +2171,7 @@ func TestHelp_OverlayBlocksOtherKeys(t *testing.T) {
 	m.showHelp = true
 
 	// j should not move selection while help is open
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 
 	if m.selectedIdx != 0 {
@@ -2191,7 +2189,7 @@ func TestHelp_QuitWorksInOverlay(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
 	if cmd == nil {
 		t.Error("expected quit command when pressing q in help overlay")
@@ -2205,7 +2203,7 @@ func TestHelp_RKeyDoesNotError(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// r should not panic or change state
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
 	m = updated.(Model)
 
 	if m.selectedIdx != 0 {
@@ -2219,7 +2217,7 @@ func TestHelp_StatusBarShowsHelpHint(t *testing.T) {
 	m.height = 40
 	m.ready = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "[?] Help") {
 		t.Error("expected status bar to show [?] Help hint")
 	}
@@ -2232,7 +2230,7 @@ func TestHelp_ScrollDownInOverlay(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 
 	if m.helpScroll != 1 {
@@ -2251,7 +2249,7 @@ func TestHelp_ScrollUpInOverlay(t *testing.T) {
 	m.showHelp = true
 	m.helpScroll = 3
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
 
 	if m.helpScroll != 2 {
@@ -2267,7 +2265,7 @@ func TestHelp_ScrollUpStopsAtZero(t *testing.T) {
 	m.showHelp = true
 	m.helpScroll = 0
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	m = updated.(Model)
 
 	if m.helpScroll != 0 {
@@ -2283,7 +2281,7 @@ func TestHelp_ScrollResetsOnClose(t *testing.T) {
 	m.showHelp = true
 	m.helpScroll = 5
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(Model)
 
 	if m.helpScroll != 0 {
@@ -2299,7 +2297,7 @@ func TestHelp_RegistryDrivesOverlay(t *testing.T) {
 	m.ready = true
 	m.showHelp = true
 
-	output := m.View()
+	output := m.viewString()
 
 	for _, kb := range keybindingRegistry {
 		if !strings.Contains(output, kb.Keys) {
@@ -2324,7 +2322,7 @@ func TestHelp_OverlayScrollsWithSmallHeight(t *testing.T) {
 	m.showHelp = true
 	m.helpScroll = 5
 
-	output := m.View()
+	output := m.viewString()
 
 	// The scrolled output should not show the title line (it's above the scroll offset)
 	if strings.Contains(output, "Help — Keybindings") {
@@ -2538,7 +2536,7 @@ func TestRefresh_StatusBarShowsRefreshedAgo(t *testing.T) {
 	m.nowFunc = func() time.Time { return baseTime }
 	m.lastRefresh = baseTime.Add(-5 * time.Second)
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Refreshed 5s ago") {
 		t.Errorf("expected 'Refreshed 5s ago' in status bar, got: %s", output)
 	}
@@ -2550,7 +2548,7 @@ func TestRefresh_StatusBarShowsDefaultBeforeFirstRefresh(t *testing.T) {
 	m.height = 40
 	m.ready = true
 
-	output := m.View()
+	output := m.viewString()
 	if !strings.Contains(output, "Refresh: 3s") {
 		t.Errorf("expected 'Refresh: 3s' before first refresh, got: %s", output)
 	}
@@ -2648,10 +2646,9 @@ func TestMouse_ClickTreePaneSwitchesFocus(t *testing.T) {
 	m.focusedPane = detailPane
 
 	// Click in tree panel region (x=10, within treeWidth which is 120*2/5=48)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
@@ -2667,10 +2664,9 @@ func TestMouse_ClickDetailPaneSwitchesFocus(t *testing.T) {
 	m.focusedPane = treePane
 
 	// Click in detail panel region (x=60, beyond treeWidth of 48)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != detailPane {
@@ -2685,10 +2681,9 @@ func TestMouse_ClickIgnoredInNarrowMode(t *testing.T) {
 	m.ready = true
 	m.focusedPane = treePane
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
@@ -2704,10 +2699,9 @@ func TestMouse_ClickIgnoredInOverlayMode(t *testing.T) {
 	m.showOverlay = true
 	m.focusedPane = treePane
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
@@ -2723,10 +2717,9 @@ func TestMouse_ClickIgnoredInHelpMode(t *testing.T) {
 	m.showHelp = true
 	m.focusedPane = treePane
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
@@ -2746,10 +2739,8 @@ func TestMouse_ReleaseCopiesSelectionAfterDrag(t *testing.T) {
 	m.selEndCol = 5
 	m.detailLines = []string{"Hello World"}
 
-	updated, cmd := m.Update(tea.MouseMsg{
+	updated, cmd := m.Update(tea.MouseReleaseMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonNone,
-		Action: tea.MouseActionRelease,
 	})
 	m = updated.(Model)
 	if m.selecting {
@@ -2779,10 +2770,8 @@ func TestMouse_ReleaseNoCopyOnSimpleClick(t *testing.T) {
 	m.selEndCol = 3
 	m.detailLines = []string{"Hello World"}
 
-	updated, cmd := m.Update(tea.MouseMsg{
+	updated, cmd := m.Update(tea.MouseReleaseMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonNone,
-		Action: tea.MouseActionRelease,
 	})
 	m = updated.(Model)
 	if m.selecting {
@@ -2806,10 +2795,9 @@ func TestMouse_ReleaseIgnored(t *testing.T) {
 	m.ready = true
 	m.focusedPane = treePane
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseReleaseMsg{
 		X: 60, Y: 5,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionRelease,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.focusedPane != treePane {
@@ -2827,10 +2815,9 @@ func TestMouse_ClickTreeRowSelectsBead(t *testing.T) {
 	m.focusedPane = detailPane
 
 	// Click on row index 2 (Y=3: header=0, row0=1, row1=2, row2=3)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 3,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 2 {
@@ -2856,10 +2843,9 @@ func TestMouse_ClickTreeRowWithScrollOffset(t *testing.T) {
 	m.treeScroll = 2 // Scrolled down by 2
 
 	// Click Y=1 (first visible row after header), with scroll=2, should select index 2
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 1,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 2 {
@@ -2876,10 +2862,9 @@ func TestMouse_ClickHeaderRowIgnored(t *testing.T) {
 	m.selectedIdx = 0
 
 	// Click on header row (Y=0)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 0,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
@@ -2896,10 +2881,9 @@ func TestMouse_ClickBelowLastRowIgnored(t *testing.T) {
 	m.selectedIdx = 0
 
 	// Click well below the last row (Y=20, only 2 rows)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 20,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
@@ -2915,10 +2899,9 @@ func TestMouse_ClickIgnoredDuringSearch(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.searching = true
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 2,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
@@ -2934,10 +2917,9 @@ func TestMouse_ClickIgnoredDuringFilter(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.filtering = true
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 2,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 0 {
@@ -2956,10 +2938,9 @@ func TestMouse_ClickTreeRowInNarrowMode(t *testing.T) {
 	m.selectedIdx = 0
 
 	// Click on second row (Y=2)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 2,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 1 {
@@ -2979,10 +2960,9 @@ func TestMouse_ClickTreeRowThenKeyboardNavigation(t *testing.T) {
 	m := modelWithTree(beads, false)
 
 	// Click to select second row
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseClickMsg{
 		X: 10, Y: 2,
-		Button: tea.MouseButtonLeft,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseLeft,
 	})
 	m = updated.(Model)
 	if m.selectedIdx != 1 {
@@ -2990,7 +2970,7 @@ func TestMouse_ClickTreeRowThenKeyboardNavigation(t *testing.T) {
 	}
 
 	// Navigate down with keyboard
-	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = updated.(Model)
 	if m.selectedIdx != 2 {
 		t.Errorf("expected selectedIdx=2 after j key, got %d", m.selectedIdx)
@@ -3010,10 +2990,9 @@ func TestMouseWheel_TreePanelScrollDown(t *testing.T) {
 	m.syncSelectedBead()
 
 	// Scroll down in tree panel (X within tree width)
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 10,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3039,10 +3018,9 @@ func TestMouseWheel_TreePanelScrollUp(t *testing.T) {
 	m.treeScroll = 10
 
 	// Scroll up in tree panel
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 10,
-		Button: tea.MouseButtonWheelUp,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelUp,
 	})
 	m = updated.(Model)
 
@@ -3059,10 +3037,9 @@ func TestMouseWheel_TreePanelScrollUpClampsToZero(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.treeScroll = 1 // less than scroll step of 3
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 10,
-		Button: tea.MouseButtonWheelUp,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelUp,
 	})
 	m = updated.(Model)
 
@@ -3079,10 +3056,9 @@ func TestMouseWheel_TreePanelScrollDownClampsToMax(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.height = 30 // viewport > number of rows, so max scroll = 0
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3101,10 +3077,9 @@ func TestMouseWheel_DetailPanelScrollDown(t *testing.T) {
 
 	// Scroll down in detail panel (X beyond tree width)
 	tw := m.treeWidth()
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: tw + 5, Y: 10,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3125,10 +3100,9 @@ func TestMouseWheel_DetailPanelScrollUp(t *testing.T) {
 	m.detailScroll = 10
 
 	tw := m.treeWidth()
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: tw + 5, Y: 10,
-		Button: tea.MouseButtonWheelUp,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelUp,
 	})
 	m = updated.(Model)
 
@@ -3145,10 +3119,9 @@ func TestMouseWheel_DetailScrollUpClampsToZero(t *testing.T) {
 	m.detailScroll = 2
 
 	tw := m.treeWidth()
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: tw + 5, Y: 10,
-		Button: tea.MouseButtonWheelUp,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelUp,
 	})
 	m = updated.(Model)
 
@@ -3165,10 +3138,9 @@ func TestMouseWheel_DoesNotChangeFocus(t *testing.T) {
 	m.focusedPane = detailPane // start with detail focused
 
 	// Scroll in tree panel area
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3186,10 +3158,9 @@ func TestMouseWheel_DoesNotChangeSelection(t *testing.T) {
 	m.selectedIdx = 5
 	m.syncSelectedBead()
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3206,10 +3177,9 @@ func TestMouseWheel_NarrowModeScrollsTree(t *testing.T) {
 	m := modelWithTree(beads, false)
 	m.width = 90 // narrow mode
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 50, Y: 10,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3227,10 +3197,9 @@ func TestMouseWheel_OverlayModeScrollsDetail(t *testing.T) {
 	m.syncSelectedBead()
 	m.showOverlay = true
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3243,10 +3212,9 @@ func TestMouseWheel_HelpOverlayScrollsHelp(t *testing.T) {
 	m := modelWithTree(nil, false)
 	m.showHelp = true
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 
@@ -3255,10 +3223,9 @@ func TestMouseWheel_HelpOverlayScrollsHelp(t *testing.T) {
 	}
 
 	// Scroll up
-	updated, _ = m.Update(tea.MouseMsg{
+	updated, _ = m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelUp,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelUp,
 	})
 	m = updated.(Model)
 
@@ -3271,10 +3238,9 @@ func TestMouseWheel_FilterOverlayIgnored(t *testing.T) {
 	m := modelWithTree(nil, false)
 	m.filtering = true
 
-	updated, _ := m.Update(tea.MouseMsg{
+	updated, _ := m.Update(tea.MouseWheelMsg{
 		X: 5, Y: 5,
-		Button: tea.MouseButtonWheelDown,
-		Action: tea.MouseActionPress,
+		Button: tea.MouseWheelDown,
 	})
 	m = updated.(Model)
 

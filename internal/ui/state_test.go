@@ -7,14 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
 )
 
 func init() {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = true
 }
 
 func sampleBeadsForState() []data.Bead {

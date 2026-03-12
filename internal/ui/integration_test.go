@@ -5,16 +5,13 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/teatest"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/testutil"
 )
 
 func init() {
-	lipgloss.SetColorProfile(termenv.Ascii)
+	noColorHighlight = true
 }
 
 // newIntegrationModel creates a Model wired to a mock executor for integration testing.
@@ -33,37 +30,40 @@ func newIntegrationModel() Model {
 }
 
 func TestIntegration_StartupShowsTree(t *testing.T) {
-	tm := teatest.NewTestModel(t, newIntegrationModel(), teatest.WithInitialTermSize(120, 40))
+	tm := testutil.NewTestModel(t, newIntegrationModel(), testutil.WithInitialTermSize(120, 40))
 
 	// Wait for the tree to appear with our fixture beads
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "proj-1", "proj-1.1", "proj-1.2", "proj-2", "Beads")
-	}, teatest.WithDuration(5*time.Second))
+	}, testutil.WithDuration(5*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, testutil.WithFinalTimeout(3*time.Second))
 }
 
 func TestIntegration_NavigationUpdatesDetail(t *testing.T) {
-	tm := teatest.NewTestModel(t, newIntegrationModel(), teatest.WithInitialTermSize(120, 40))
+	tm := testutil.NewTestModel(t, newIntegrationModel(), testutil.WithInitialTermSize(120, 40))
 
 	// Wait for tree to load
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return containsAll(string(bts), "proj-1", "Beads")
-	}, teatest.WithDuration(5*time.Second))
+	}, testutil.WithDuration(5*time.Second))
 
 	// Navigate down to proj-1.1
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	tm.Send(tea.KeyPressMsg{Code: 'j', Text: "j"})
 
 	// Wait for detail pane to show proj-1.1 info
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	// Note: bubbletea v2 uses differential rendering with cursor positioning,
+	// so IDs like "proj-1.1" may be split across escape codes. Check for
+	// contiguous strings that appear in single writes.
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
-		return containsAll(s, "proj-1.1", "Set up CI pipeline")
-	}, teatest.WithDuration(3*time.Second))
+		return containsAll(s, "Set up CI pipeline")
+	}, testutil.WithDuration(3*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, testutil.WithFinalTimeout(3*time.Second))
 }
 
 func TestIntegration_ExpandCollapse(t *testing.T) {
@@ -78,87 +78,87 @@ func TestIntegration_ExpandCollapse(t *testing.T) {
 	m.SetFetcher(fetcher)
 	m.nowFunc = func() time.Time { return time.Date(2026, 3, 12, 0, 0, 0, 0, time.UTC) }
 
-	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 40))
+	tm := testutil.NewTestModel(t, m, testutil.WithInitialTermSize(120, 40))
 
 	// Wait for tree to load — children should not be visible initially
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "proj-1", "▶") // collapsed indicator
-	}, teatest.WithDuration(5*time.Second))
+	}, testutil.WithDuration(5*time.Second))
 
 	// Expand proj-1 with Right arrow
-	tm.Send(tea.KeyMsg{Type: tea.KeyRight})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyRight})
 
 	// Children should now be visible
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "proj-1.1", "proj-1.2", "proj-1.3", "▼")
-	}, teatest.WithDuration(3*time.Second))
+	}, testutil.WithDuration(3*time.Second))
 
 	// Collapse with Left arrow
-	tm.Send(tea.KeyMsg{Type: tea.KeyLeft})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyLeft})
 
 	// Children should be hidden again
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "▶") && !containsAll(s, "proj-1.1")
-	}, teatest.WithDuration(3*time.Second))
+	}, testutil.WithDuration(3*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, testutil.WithFinalTimeout(3*time.Second))
 }
 
 func TestIntegration_Search(t *testing.T) {
-	tm := teatest.NewTestModel(t, newIntegrationModel(), teatest.WithInitialTermSize(120, 40))
+	tm := testutil.NewTestModel(t, newIntegrationModel(), testutil.WithInitialTermSize(120, 40))
 
 	// Wait for tree
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return containsAll(string(bts), "proj-1", "proj-2")
-	}, teatest.WithDuration(5*time.Second))
+	}, testutil.WithDuration(5*time.Second))
 
 	// Enter search mode
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	tm.Send(tea.KeyPressMsg{Code: '/', Text: "/"})
 
 	// Type search query
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("auth")})
+	tm.Send(tea.KeyPressMsg{Code: 'a', Text: "auth"})
 
 	// Should filter to only show proj-2 (Feature: User auth)
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "proj-2", "Search:")
-	}, teatest.WithDuration(3*time.Second))
+	}, testutil.WithDuration(3*time.Second))
 
 	// Escape clears search
-	tm.Send(tea.KeyMsg{Type: tea.KeyEsc})
+	tm.Send(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	// All beads should reappear
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return containsAll(string(bts), "proj-1", "proj-2")
-	}, teatest.WithDuration(3*time.Second))
+	}, testutil.WithDuration(3*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, testutil.WithFinalTimeout(3*time.Second))
 }
 
 func TestIntegration_Resize(t *testing.T) {
-	tm := teatest.NewTestModel(t, newIntegrationModel(), teatest.WithInitialTermSize(120, 40))
+	tm := testutil.NewTestModel(t, newIntegrationModel(), testutil.WithInitialTermSize(120, 40))
 
 	// Wait for tree
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return containsAll(string(bts), "proj-1")
-	}, teatest.WithDuration(5*time.Second))
+	}, testutil.WithDuration(5*time.Second))
 
 	// Resize to narrow mode
 	tm.Send(tea.WindowSizeMsg{Width: 90, Height: 30})
 
 	// In narrow mode the detail pane should be hidden — tree should still show
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+	testutil.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
 		return containsAll(s, "proj-1", "Beads")
-	}, teatest.WithDuration(3*time.Second))
+	}, testutil.WithDuration(3*time.Second))
 
-	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+	tm.Send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	tm.WaitFinished(t, testutil.WithFinalTimeout(3*time.Second))
 }
 
 // containsAll checks if s contains all the given substrings.

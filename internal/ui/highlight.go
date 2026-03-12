@@ -3,13 +3,14 @@ package ui
 import (
 	"regexp"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
 
 // ANSI escape sequence pattern for SGR codes
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// noColorHighlight controls whether search highlighting is disabled.
+// Set to true in tests with Ascii color profile.
+var noColorHighlight bool
 
 // highlightSearchMatches highlights all case-insensitive occurrences of query in text.
 // Works with both plain and ANSI-styled text. Uses background color only (reset via
@@ -19,7 +20,7 @@ func highlightSearchMatches(text, query string) string {
 	if query == "" || text == "" {
 		return text
 	}
-	if lipgloss.ColorProfile() == termenv.Ascii {
+	if noColorHighlight {
 		return text
 	}
 

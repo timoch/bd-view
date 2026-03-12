@@ -5,9 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/spf13/cobra"
 
 	"github.com/timoch/bd-view/internal/data"
@@ -21,10 +20,6 @@ func main() {
 		Use:   "bd-view",
 		Short: "Terminal UI viewer for .beads databases",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cfg.NoColor {
-				lipgloss.SetColorProfile(termenv.Ascii)
-			}
-
 			// Derive state file path from database path
 			if cfg.DBPath != "" {
 				cfg.StatePath = filepath.Join(filepath.Dir(cfg.DBPath), "bd-view-state.json")
@@ -36,7 +31,13 @@ func main() {
 
 			m := ui.New(cfg)
 			m.SetFetcher(fetcher)
-			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+
+			opts := []tea.ProgramOption{}
+			if cfg.NoColor {
+				opts = append(opts, tea.WithColorProfile(colorprofile.Ascii))
+			}
+
+			p := tea.NewProgram(m, opts...)
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running TUI: %w", err)
 			}

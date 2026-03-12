@@ -2,14 +2,14 @@ package ui
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
 )
@@ -175,15 +175,9 @@ func (m Model) Init() tea.Cmd {
 }
 
 // copyToClipboardCmd returns a command that copies text to the system clipboard
-// using the OSC 52 escape sequence. This works in most modern terminals and
-// over SSH with forwarding enabled.
+// using the native Bubble Tea v2 clipboard support (OSC 52).
 func copyToClipboardCmd(text string) tea.Cmd {
-	return func() tea.Msg {
-		b64 := base64.StdEncoding.EncodeToString([]byte(text))
-		seq := fmt.Sprintf("\033]52;c;%s\a", b64)
-		fmt.Print(seq)
-		return nil
-	}
+	return tea.SetClipboard(text)
 }
 
 // fetchBeadsCmd returns a command that fetches the bead list.
@@ -211,7 +205,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearStatusMsg:
 		m.statusMsg = ""
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Clear any temporary status message and selection on keypress
 		m.statusMsg = ""
 		m.hasSelection = false
@@ -276,7 +270,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.filterCursor > 0 {
 					m.filterCursor--
 				}
-			case " ":
+			case "space":
 				if m.filterCursor < len(items) {
 					item := items[m.filterCursor]
 					if item.section == 0 {
@@ -302,8 +296,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// In search mode, capture input
 		if m.searching {
-			switch msg.Type {
-			case tea.KeyEsc:
+			switch msg.Code {
+			case tea.KeyEscape:
 				m.searching = false
 				m.searchQuery = ""
 				m.selectedIdx = 0
@@ -319,11 +313,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.treeScroll = 0
 					m.syncSelectedBead()
 				}
-			case tea.KeyRunes:
-				m.searchQuery += string(msg.Runes)
-				m.selectedIdx = 0
-				m.treeScroll = 0
-				m.syncSelectedBead()
+			default:
+				if msg.Text != "" {
+					m.searchQuery += msg.Text
+					m.selectedIdx = 0
+					m.treeScroll = 0
+					m.syncSelectedBead()
+				}
 			}
 			return m, nil
 		}
@@ -428,117 +424,114 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 		}
-	case tea.MouseMsg:
+	case tea.MouseWheelMsg:
 		// Handle mouse wheel scroll events
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			// Clear selection on scroll
-			m.hasSelection = false
-			m.selecting = false
+		// Clear selection on scroll
+		m.hasSelection = false
+		m.selecting = false
 
-			scrollStep := 3
-			scrollUp := msg.Button == tea.MouseButtonWheelUp
+		scrollStep := 3
+		scrollUp := msg.Button == tea.MouseWheelUp
 
-			// Help overlay: scroll help content
-			if m.showHelp {
-				if scrollUp {
-					m.helpScroll -= scrollStep
-					if m.helpScroll < 0 {
-						m.helpScroll = 0
-					}
-				} else {
-					m.helpScroll += scrollStep
-				}
-				return m, nil
-			}
-
-			// Filter overlay: ignore scroll (no scrollable content)
-			if m.filtering {
-				return m, nil
-			}
-
-			// Determine target panel
-			scrollTree := false
-			if m.showOverlay {
-				// Overlay mode: scroll detail content
-				scrollTree = false
-			} else if m.isNarrow() {
-				// Narrow mode: only tree visible
-				scrollTree = true
-			} else {
-				tw := m.treeWidth()
-				scrollTree = msg.X < tw
-			}
-
-			if scrollTree {
-				visible := m.visibleNodes()
-				viewportHeight := m.height - 1 // subtract header
-				if viewportHeight < 1 {
-					viewportHeight = 1
-				}
-				maxScroll := len(visible) - viewportHeight
-				if maxScroll < 0 {
-					maxScroll = 0
-				}
-				if scrollUp {
-					m.treeScroll -= scrollStep
-					if m.treeScroll < 0 {
-						m.treeScroll = 0
-					}
-				} else {
-					m.treeScroll += scrollStep
-					if m.treeScroll > maxScroll {
-						m.treeScroll = maxScroll
-					}
+		// Help overlay: scroll help content
+		if m.showHelp {
+			if scrollUp {
+				m.helpScroll -= scrollStep
+				if m.helpScroll < 0 {
+					m.helpScroll = 0
 				}
 			} else {
-				if scrollUp {
-					m.detailScroll -= scrollStep
-					if m.detailScroll < 0 {
-						m.detailScroll = 0
-					}
-				} else {
-					m.detailScroll += scrollStep
-				}
+				m.helpScroll += scrollStep
 			}
 			return m, nil
 		}
 
+		// Filter overlay: ignore scroll (no scrollable content)
+		if m.filtering {
+			return m, nil
+		}
+
+		// Determine target panel
+		scrollTree := false
+		if m.showOverlay {
+			// Overlay mode: scroll detail content
+			scrollTree = false
+		} else if m.isNarrow() {
+			// Narrow mode: only tree visible
+			scrollTree = true
+		} else {
+			tw := m.treeWidth()
+			scrollTree = msg.X < tw
+		}
+
+		if scrollTree {
+			visible := m.visibleNodes()
+			viewportHeight := m.height - 1 // subtract header
+			if viewportHeight < 1 {
+				viewportHeight = 1
+			}
+			maxScroll := len(visible) - viewportHeight
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			if scrollUp {
+				m.treeScroll -= scrollStep
+				if m.treeScroll < 0 {
+					m.treeScroll = 0
+				}
+			} else {
+				m.treeScroll += scrollStep
+				if m.treeScroll > maxScroll {
+					m.treeScroll = maxScroll
+				}
+			}
+		} else {
+			if scrollUp {
+				m.detailScroll -= scrollStep
+				if m.detailScroll < 0 {
+					m.detailScroll = 0
+				}
+			} else {
+				m.detailScroll += scrollStep
+			}
+		}
+		return m, nil
+
+	case tea.MouseReleaseMsg:
 		// Handle mouse button release — finalize selection and copy if dragged
-		if msg.Button == tea.MouseButtonNone && msg.Action == tea.MouseActionRelease {
-			if m.selecting {
-				m.selecting = false
-				// Only copy if selection spans more than zero characters (drag, not just click)
-				startRow, startCol, endRow, endCol := m.selectionNormalized()
-				if startRow != endRow || startCol != endCol {
-					m.hasSelection = true
-					text := m.extractSelectedText()
-					if text != "" {
-						lineCount := strings.Count(text, "\n") + 1
-						m.statusMsg = fmt.Sprintf("Copied %d line(s)", lineCount)
-						return m, tea.Batch(
-							copyToClipboardCmd(text),
-							tea.Tick(3*time.Second, func(time.Time) tea.Msg {
-								return clearStatusMsg{}
-							}),
-						)
-					}
+		if m.selecting {
+			m.selecting = false
+			// Only copy if selection spans more than zero characters (drag, not just click)
+			startRow, startCol, endRow, endCol := m.selectionNormalized()
+			if startRow != endRow || startCol != endCol {
+				m.hasSelection = true
+				text := m.extractSelectedText()
+				if text != "" {
+					lineCount := strings.Count(text, "\n") + 1
+					m.statusMsg = fmt.Sprintf("Copied %d line(s)", lineCount)
+					return m, tea.Batch(
+						copyToClipboardCmd(text),
+						tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+							return clearStatusMsg{}
+						}),
+					)
 				}
 			}
-			return m, nil
 		}
+		return m, nil
 
+	case tea.MouseMotionMsg:
 		// Handle mouse drag (motion with left button held) — text selection in detail panel
-		if msg.Action == tea.MouseActionMotion {
-			if m.selecting {
-				row, col := m.screenToDetailCoord(msg.X, msg.Y)
-				m.selEndRow = row
-				m.selEndCol = col
-			}
-			return m, nil
+		if m.selecting {
+			row, col := m.screenToDetailCoord(msg.X, msg.Y)
+			m.selEndRow = row
+			m.selEndCol = col
 		}
+		return m, nil
 
+	case tea.MouseClickMsg:
 		// Handle left-click press events
-		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+		if msg.Button == tea.MouseLeft {
 			// Clear previous selection on any click
 			m.hasSelection = false
 			m.selecting = false
@@ -1011,7 +1004,51 @@ func (m Model) isTooSmall() bool {
 	return m.width < 80 || m.height < 24
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	var content string
+
+	if !m.ready {
+		content = "Loading..."
+	} else if m.isTooSmall() {
+		content = fmt.Sprintf("Terminal too small (%dx%d). Minimum size: 80x24.", m.width, m.height)
+	} else {
+		statusBar := m.renderStatusBar()
+		contentHeight := m.height - lipgloss.Height(statusBar)
+		if contentHeight < 1 {
+			contentHeight = 1
+		}
+
+		if m.showHelp {
+			helpPanel := m.renderHelpOverlay(m.width, contentHeight)
+			content = lipgloss.JoinVertical(lipgloss.Left, helpPanel, statusBar)
+		} else if m.filtering {
+			filterPanel := m.renderFilterOverlay(m.width, contentHeight)
+			content = lipgloss.JoinVertical(lipgloss.Left, filterPanel, statusBar)
+		} else if m.showOverlay {
+			detailPanel := m.renderDetailPanel(m.width, contentHeight)
+			content = lipgloss.JoinVertical(lipgloss.Left, detailPanel, statusBar)
+		} else if m.isNarrow() {
+			treePanel := m.renderTreePanel(m.width, contentHeight)
+			content = lipgloss.JoinVertical(lipgloss.Left, treePanel, statusBar)
+		} else {
+			treeWidth := m.treeWidth()
+			detailWidth := m.width - treeWidth - 1
+
+			treePanel := m.renderTreePanel(treeWidth, contentHeight)
+			detailPanel := m.renderDetailPanel(detailWidth, contentHeight)
+			body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, detailPanel)
+			content = lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
+		}
+	}
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+// viewString returns the view content as a string for testing.
+func (m Model) viewString() string {
 	if !m.ready {
 		return "Loading..."
 	}
@@ -1026,39 +1063,29 @@ func (m Model) View() string {
 		contentHeight = 1
 	}
 
-	// Help overlay
 	if m.showHelp {
 		helpPanel := m.renderHelpOverlay(m.width, contentHeight)
 		return lipgloss.JoinVertical(lipgloss.Left, helpPanel, statusBar)
 	}
-
-	// Filter overlay
 	if m.filtering {
 		filterPanel := m.renderFilterOverlay(m.width, contentHeight)
 		return lipgloss.JoinVertical(lipgloss.Left, filterPanel, statusBar)
 	}
-
-	// Full-screen overlay in narrow mode
 	if m.showOverlay {
 		detailPanel := m.renderDetailPanel(m.width, contentHeight)
 		return lipgloss.JoinVertical(lipgloss.Left, detailPanel, statusBar)
 	}
-
 	if m.isNarrow() {
-		// Narrow mode: tree only, full width
 		treePanel := m.renderTreePanel(m.width, contentHeight)
 		return lipgloss.JoinVertical(lipgloss.Left, treePanel, statusBar)
 	}
 
 	treeWidth := m.treeWidth()
-	detailWidth := m.width - treeWidth - 1 // 1 for border
-
+	detailWidth := m.width - treeWidth - 1
 	treePanel := m.renderTreePanel(treeWidth, contentHeight)
 	detailPanel := m.renderDetailPanel(detailWidth, contentHeight)
-
-	content := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, detailPanel)
-
-	return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, detailPanel)
+	return lipgloss.JoinVertical(lipgloss.Left, body, statusBar)
 }
 
 func (m Model) treeWidth() int {
@@ -1487,10 +1514,14 @@ func (m Model) renderMarkdown(text string, width int) string {
 		styleName = "notty"
 	}
 
+	profile := termenv.ColorProfile()
+	if m.config.NoColor {
+		profile = termenv.Ascii
+	}
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styleName),
 		glamour.WithWordWrap(width),
-		glamour.WithColorProfile(lipgloss.ColorProfile()),
+		glamour.WithColorProfile(profile),
 	)
 	if err != nil {
 		return text
