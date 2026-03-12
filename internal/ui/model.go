@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/timoch/bd-view/internal/data"
+	"github.com/timoch/bd-view/internal/tree"
 )
 
 // Config holds TUI configuration from CLI flags.
@@ -31,6 +32,8 @@ type Model struct {
 	width        int
 	height       int
 	ready        bool
+	tree         *tree.Model
+	selectedIdx  int
 	selectedBead *data.Bead
 	dependents   []data.RelatedBead
 	focusedPane  paneID
@@ -42,6 +45,11 @@ func New(cfg Config) Model {
 	return Model{
 		config: cfg,
 	}
+}
+
+// SetTree sets the tree model for rendering.
+func (m *Model) SetTree(t *tree.Model) {
+	m.tree = t
 }
 
 // SetSelectedBead sets the bead displayed in the detail pane.
@@ -138,9 +146,138 @@ func (m Model) renderTreePanel(width, height int) string {
 		BorderStyle(lipgloss.NormalBorder())
 
 	header := lipgloss.NewStyle().Bold(true).Render("Beads")
-	content := header + "\n\n  (no beads loaded)"
 
+	if m.tree == nil {
+		content := header + "\n\n  (no beads loaded)"
+		return style.Render(content)
+	}
+
+	visible := m.tree.FlattenVisible()
+	if len(visible) == 0 {
+		content := header + "\n\n  (no beads loaded)"
+		return style.Render(content)
+	}
+
+	selectedStyle := lipgloss.NewStyle().Reverse(true)
+
+	var rows []string
+	for i, node := range visible {
+		row := m.renderTreeRow(node, visible)
+		if i == m.selectedIdx {
+			row = selectedStyle.Render(row)
+		}
+		rows = append(rows, row)
+	}
+
+	content := header + "\n" + strings.Join(rows, "\n")
 	return style.Render(content)
+}
+
+// renderTreeRow renders a single tree row with indentation, tree chars, and bead info.
+func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node) string {
+	var prefix string
+
+	if node.Depth > 0 {
+		// Build prefix: for each ancestor level, determine if we need a vertical bar or space
+		parts := make([]string, node.Depth)
+		current := node
+		for d := node.Depth - 1; d >= 0; d-- {
+			parent := findParent(current, visible)
+			if parent != nil && !isLastChild(current, parent) {
+				parts[d] = "│   "
+			} else {
+				parts[d] = "    "
+			}
+			current = parent
+		}
+		// Last part: connector for this node
+		parent := findParent(node, visible)
+		if parent != nil && isLastChild(node, parent) {
+			parts[node.Depth-1] = "└── "
+		} else {
+			parts[node.Depth-1] = "├── "
+		}
+		prefix = strings.Join(parts, "")
+	}
+
+	// Expand/collapse indicator for nodes with children
+	expandIndicator := ""
+	if len(node.Children) > 0 {
+		if node.Expanded {
+			expandIndicator = "[-] "
+		} else {
+			expandIndicator = "[+] "
+		}
+	}
+
+	typeLabel := shortType(node.Bead.IssueType)
+	statusIcon := m.statusIcon(node.Bead.Status)
+
+	return fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, node.Bead.ID, typeLabel, statusIcon)
+}
+
+// shortType returns abbreviated type labels.
+func shortType(issueType string) string {
+	switch issueType {
+	case "feature":
+		return "feat"
+	case "decision":
+		return "adr"
+	default:
+		return issueType
+	}
+}
+
+// statusIcon returns the status with color and icon.
+func (m Model) statusIcon(status string) string {
+	var icon string
+	var s lipgloss.Style
+
+	switch status {
+	case "open":
+		icon = "( )"
+		s = lipgloss.NewStyle()
+	case "in_progress":
+		icon = "(~)"
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+	case "blocked":
+		icon = "(!)"
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	case "deferred":
+		icon = "(z)"
+		s = lipgloss.NewStyle().Faint(true)
+	case "closed":
+		icon = "(x)"
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("34"))
+	default:
+		icon = "( )"
+		s = lipgloss.NewStyle()
+	}
+
+	return s.Render(icon)
+}
+
+// findParent finds the parent node of the given node in the tree.
+func findParent(node *tree.Node, visible []*tree.Node) *tree.Node {
+	if node.Bead.Parent == "" || node.Depth == 0 {
+		return nil
+	}
+	for _, n := range visible {
+		for _, child := range n.Children {
+			if child == node {
+				return n
+			}
+		}
+	}
+	return nil
+}
+
+// isLastChild checks if node is the last child of its parent.
+func isLastChild(node *tree.Node, parent *tree.Node) bool {
+	if parent == nil || len(parent.Children) == 0 {
+		return false
+	}
+	return parent.Children[len(parent.Children)-1] == node
 }
 
 func (m Model) renderDetailPanel(width, height int) string {

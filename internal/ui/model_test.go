@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/timoch/bd-view/internal/data"
+	"github.com/timoch/bd-view/internal/tree"
 )
 
 func init() {
@@ -434,5 +435,261 @@ func TestSetSelectedBeadDetail(t *testing.T) {
 	}
 	if m.dependents != nil {
 		t.Error("expected nil dependents after setting nil detail")
+	}
+}
+
+// Helper to build a model with a tree for tree panel tests.
+func modelWithTree(beads []data.Bead, expandAll bool) Model {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	t := tree.BuildTree(beads, expandAll)
+	m.SetTree(t)
+	return m
+}
+
+func TestTreePanel_Header(t *testing.T) {
+	m := modelWithTree([]data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}, false)
+
+	output := m.View()
+	if !strings.Contains(output, "Beads") {
+		t.Error("expected 'Beads' header in tree panel")
+	}
+}
+
+func TestTreePanel_NoBeads(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	output := m.View()
+	if !strings.Contains(output, "(no beads loaded)") {
+		t.Error("expected empty state when no tree set")
+	}
+}
+
+func TestTreePanel_EmptyTree(t *testing.T) {
+	m := modelWithTree([]data.Bead{}, false)
+
+	output := m.View()
+	if !strings.Contains(output, "(no beads loaded)") {
+		t.Error("expected empty state for empty bead list")
+	}
+}
+
+func TestTreePanel_ShowsBeadIDTypeStatus(t *testing.T) {
+	m := modelWithTree([]data.Bead{
+		{ID: "epic-1", IssueType: "epic", Status: "open"},
+		{ID: "feat-1", IssueType: "feature", Status: "closed"},
+		{ID: "task-1", IssueType: "task", Status: "in_progress"},
+		{ID: "bug-1", IssueType: "bug", Status: "blocked"},
+		{ID: "chore-1", IssueType: "chore", Status: "deferred"},
+		{ID: "adr-1", IssueType: "decision", Status: "open"},
+	}, false)
+
+	output := m.View()
+
+	checks := []struct {
+		label string
+		want  string
+	}{
+		{"epic ID", "epic-1"},
+		{"epic type", "epic"},
+		{"feat ID", "feat-1"},
+		{"feat short type", "feat"},
+		{"task ID", "task-1"},
+		{"task type", "task"},
+		{"bug ID", "bug-1"},
+		{"bug type", "bug"},
+		{"chore ID", "chore-1"},
+		{"chore type", "chore"},
+		{"adr ID", "adr-1"},
+		{"adr short type", "adr"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(output, c.want) {
+			t.Errorf("expected %s %q in output", c.label, c.want)
+		}
+	}
+}
+
+func TestTreePanel_StatusIcons(t *testing.T) {
+	m := modelWithTree([]data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "in_progress"},
+		{ID: "b-3", IssueType: "task", Status: "blocked"},
+		{ID: "b-4", IssueType: "task", Status: "deferred"},
+		{ID: "b-5", IssueType: "task", Status: "closed"},
+	}, false)
+
+	output := m.View()
+
+	icons := []struct {
+		status string
+		icon   string
+	}{
+		{"open", "( )"},
+		{"in_progress", "(~)"},
+		{"blocked", "(!)"},
+		{"deferred", "(z)"},
+		{"closed", "(x)"},
+	}
+	for _, ic := range icons {
+		if !strings.Contains(output, ic.icon) {
+			t.Errorf("expected icon %q for status %s", ic.icon, ic.status)
+		}
+	}
+}
+
+func TestTreePanel_SelectedHighlighted(t *testing.T) {
+	m := modelWithTree([]data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}, false)
+
+	// selectedIdx defaults to 0, which is b-1
+	output := m.View()
+	// The selected row should contain the bead ID (it's highlighted with Reverse style)
+	if !strings.Contains(output, "b-1") {
+		t.Error("expected selected bead b-1 in output")
+	}
+}
+
+func TestTreePanel_ExpandCollapseIndicators(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent-1", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent-1"},
+	}
+
+	// Collapsed
+	m := modelWithTree(beads, false)
+	output := m.View()
+	if !strings.Contains(output, "[+]") {
+		t.Error("expected [+] for collapsed parent")
+	}
+
+	// Expanded
+	m = modelWithTree(beads, true)
+	output = m.View()
+	if !strings.Contains(output, "[-]") {
+		t.Error("expected [-] for expanded parent")
+	}
+}
+
+func TestTreePanel_TreeDrawingChars(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+		{ID: "child-2", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+
+	m := modelWithTree(beads, true)
+	output := m.View()
+
+	// Middle child should use ├──
+	if !strings.Contains(output, "├──") {
+		t.Error("expected ├── for middle child")
+	}
+	// Last child should use └──
+	if !strings.Contains(output, "└──") {
+		t.Error("expected └── for last child")
+	}
+}
+
+func TestTreePanel_ChildrenHiddenWhenCollapsed(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+
+	m := modelWithTree(beads, false)
+	output := m.View()
+
+	if !strings.Contains(output, "parent") {
+		t.Error("expected parent visible when collapsed")
+	}
+	if strings.Contains(output, "child-1") {
+		t.Error("expected child hidden when parent collapsed")
+	}
+}
+
+func TestTreePanel_ChildrenVisibleWhenExpanded(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+
+	m := modelWithTree(beads, true)
+	output := m.View()
+
+	if !strings.Contains(output, "child-1") {
+		t.Error("expected child visible when parent expanded")
+	}
+}
+
+func TestShortType(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"feature", "feat"},
+		{"decision", "adr"},
+		{"task", "task"},
+		{"bug", "bug"},
+		{"chore", "chore"},
+		{"epic", "epic"},
+	}
+	for _, c := range cases {
+		got := shortType(c.input)
+		if got != c.want {
+			t.Errorf("shortType(%q) = %q, want %q", c.input, got, c.want)
+		}
+	}
+}
+
+func TestStatusIcon_AllStatuses(t *testing.T) {
+	m := Model{}
+	cases := []struct {
+		status string
+		icon   string
+	}{
+		{"open", "( )"},
+		{"in_progress", "(~)"},
+		{"blocked", "(!)"},
+		{"deferred", "(z)"},
+		{"closed", "(x)"},
+		{"unknown", "( )"},
+	}
+	for _, c := range cases {
+		result := m.statusIcon(c.status)
+		if !strings.Contains(result, c.icon) {
+			t.Errorf("statusIcon(%q) = %q, expected to contain %q", c.status, result, c.icon)
+		}
+	}
+}
+
+func TestTreePanel_NestedHierarchy(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "epic-1", IssueType: "epic", Status: "open"},
+		{ID: "feat-1", IssueType: "feature", Status: "open", Parent: "epic-1"},
+		{ID: "task-1", IssueType: "task", Status: "open", Parent: "feat-1"},
+	}
+
+	m := modelWithTree(beads, true)
+	output := m.View()
+
+	// All should be visible
+	if !strings.Contains(output, "epic-1") {
+		t.Error("expected epic-1 visible")
+	}
+	if !strings.Contains(output, "feat-1") {
+		t.Error("expected feat-1 visible")
+	}
+	if !strings.Contains(output, "task-1") {
+		t.Error("expected task-1 visible")
 	}
 }
