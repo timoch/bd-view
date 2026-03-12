@@ -584,11 +584,11 @@ func TestTreePanel_StatusIcons(t *testing.T) {
 		status string
 		icon   string
 	}{
-		{"open", "( )"},
-		{"in_progress", "(~)"},
-		{"blocked", "(!)"},
-		{"deferred", "(z)"},
-		{"closed", "(x)"},
+		{"open", "○"},
+		{"in_progress", "◉"},
+		{"blocked", "✗"},
+		{"deferred", "◌"},
+		{"closed", "✓"},
 	}
 	for _, ic := range icons {
 		if !strings.Contains(output, ic.icon) {
@@ -709,12 +709,12 @@ func TestStatusIcon_AllStatuses(t *testing.T) {
 		status string
 		icon   string
 	}{
-		{"open", "( )"},
-		{"in_progress", "(~)"},
-		{"blocked", "(!)"},
-		{"deferred", "(z)"},
-		{"closed", "(x)"},
-		{"unknown", "( )"},
+		{"open", "○"},
+		{"in_progress", "◉"},
+		{"blocked", "✗"},
+		{"deferred", "◌"},
+		{"closed", "✓"},
+		{"unknown", "○"},
 	}
 	for _, c := range cases {
 		result := m.statusIcon(c.status)

@@ -1,9 +1,9 @@
 Beads                                                                                     │
-▼ proj-1  epic  (~)  [1/3]  Epic: Project setup                                           │
-├── proj-1.1  task  (x)  Set up CI pipeline                                               │
-├── proj-1.2  task  ( )  Configure linting                                                │
-└── proj-1.3  task  (!)  Write integration tests                                          │
-proj-2  feat  ( )  Feature: User auth                                                     │
+▼ proj-1  epic  ◉  [1/3]  Epic: Project setup                                             │
+├── proj-1.1  task  ✓  Set up CI pipeline                                                 │
+├── proj-1.2  task  ○  Configure linting                                                  │
+└── proj-1.3  task  ✗  Write integration tests                                            │
+proj-2  feat  ○  Feature: User auth                                                       │
                                                                                           │
                                                                                           │
                                                                                           │

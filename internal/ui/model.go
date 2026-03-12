@@ -1061,22 +1061,22 @@ func (m Model) statusIcon(status string) string {
 
 	switch status {
 	case "open":
-		icon = "( )"
+		icon = "○"
 		s = lipgloss.NewStyle()
 	case "in_progress":
-		icon = "(~)"
+		icon = "◉"
 		s = lipgloss.NewStyle().Foreground(colorStatusInProgress)
 	case "blocked":
-		icon = "(!)"
+		icon = "✗"
 		s = lipgloss.NewStyle().Foreground(colorStatusBlocked)
 	case "deferred":
-		icon = "(z)"
+		icon = "◌"
 		s = lipgloss.NewStyle().Faint(true).Foreground(colorStatusDeferred)
 	case "closed":
-		icon = "(x)"
+		icon = "✓"
 		s = lipgloss.NewStyle().Foreground(colorStatusClosed)
 	default:
-		icon = "( )"
+		icon = "○"
 		s = lipgloss.NewStyle()
 	}
 
