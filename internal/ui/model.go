@@ -23,12 +23,14 @@ type tickMsg time.Time
 
 // Config holds TUI configuration from CLI flags.
 type Config struct {
-	DBPath         string
-	Refresh        int
-	ExpandAll      bool
-	NoColor        bool
-	FilterTypes    []string
-	FilterStatuses []string
+	DBPath            string
+	Refresh           int
+	ExpandAll         bool
+	ExpandAllExplicit bool // true when --expand-all was explicitly passed
+	NoColor           bool
+	FilterTypes       []string
+	FilterStatuses    []string
+	StatePath         string // path to bd-view-state.json for persist
 }
 
 // paneID identifies which pane has focus.
@@ -553,6 +555,7 @@ func (m *Model) expandSelected() {
 	node := visible[m.selectedIdx]
 	if len(node.Children) > 0 && !node.Expanded {
 		m.tree.ToggleExpand(node.Bead.ID)
+		m.persistExpandState()
 	}
 }
 
@@ -565,6 +568,7 @@ func (m *Model) collapseOrMoveToParent() {
 	// If expanded parent, collapse it
 	if len(node.Children) > 0 && node.Expanded {
 		m.tree.ToggleExpand(node.Bead.ID)
+		m.persistExpandState()
 		return
 	}
 	// Otherwise, move to parent
@@ -607,6 +611,7 @@ func (m *Model) expandAllNodes() {
 		return
 	}
 	m.tree.ExpandAll()
+	m.persistExpandState()
 	// Clamp selectedIdx to valid range
 	visible := m.visibleNodes()
 	if len(visible) == 0 {
@@ -627,6 +632,7 @@ func (m *Model) collapseAllNodes() {
 		selectedID = visible[m.selectedIdx].Bead.ID
 	}
 	m.tree.CollapseAll()
+	m.persistExpandState()
 	// After collapsing, find the selected bead or its nearest ancestor in visible roots
 	newVisible := m.visibleNodes()
 	if len(newVisible) == 0 {
@@ -680,6 +686,7 @@ func (m *Model) applyRefresh(newBeads []data.Bead) {
 	}
 
 	// Remember current selection and expand state
+	firstLoad := m.tree == nil
 	var selectedID string
 	expandState := make(map[string]bool)
 	if m.tree != nil {
@@ -695,10 +702,29 @@ func (m *Model) applyRefresh(newBeads []data.Bead) {
 	// Rebuild tree
 	newTree := tree.BuildTree(newBeads, m.config.ExpandAll)
 
-	// Restore expand state
+	// Restore expand state from previous tree (in-session refresh)
 	for id, expanded := range expandState {
 		if node, ok := newTree.ByID[id]; ok {
 			node.Expanded = expanded
+		}
+	}
+
+	// On first load, apply persisted expand state unless --expand-all was explicitly passed
+	if firstLoad && !m.config.ExpandAllExplicit && m.config.StatePath != "" {
+		if expandedIDs := LoadExpandState(m.config.StatePath); expandedIDs != nil {
+			// Override BuildTree defaults with persisted state
+			for _, node := range newTree.ByID {
+				node.Expanded = false
+			}
+			idSet := make(map[string]bool, len(expandedIDs))
+			for _, id := range expandedIDs {
+				idSet[id] = true
+			}
+			for id, node := range newTree.ByID {
+				if idSet[id] {
+					node.Expanded = true
+				}
+			}
 		}
 	}
 

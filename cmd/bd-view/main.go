@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,6 +24,12 @@ func main() {
 			if cfg.NoColor {
 				lipgloss.SetColorProfile(termenv.Ascii)
 			}
+
+			// Derive state file path from database path
+			if cfg.DBPath != "" {
+				cfg.StatePath = filepath.Join(filepath.Dir(cfg.DBPath), "bd-view-state.json")
+			}
+			cfg.ExpandAllExplicit = cmd.Flags().Changed("expand-all")
 
 			executor := &data.BdExecutor{DBPath: cfg.DBPath}
 			fetcher := data.NewFetcher(executor)
