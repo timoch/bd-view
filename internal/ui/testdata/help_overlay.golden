@@ -22,14 +22,14 @@
                                                                                                                         
   OTHER                                                                                                                 
     y            Copy bead ID to clipboard                                                                              
-    Drag         Select text in detail panel                                                                            
-    Right-click  Copy selected text to clipboard                                                                        
+    Drag         Select and copy text in detail panel                                                                   
     Shift+Click  Terminal-native text selection (passthrough)                                                           
     r            Force refresh                                                                                          
     ?            Show this help                                                                                         
     q            Quit                                                                                                   
                                                                                                                         
   [Esc/?] Close  [j/k] Scroll                                                                                           
+                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
