@@ -12,10 +12,12 @@ import (
 
 // Config holds TUI configuration from CLI flags.
 type Config struct {
-	DBPath    string
-	Refresh   int
-	ExpandAll bool
-	NoColor   bool
+	DBPath         string
+	Refresh        int
+	ExpandAll      bool
+	NoColor        bool
+	FilterTypes    []string
+	FilterStatuses []string
 }
 
 // paneID identifies which pane has focus.
@@ -42,13 +44,50 @@ type Model struct {
 	showOverlay  bool // full-screen detail overlay in narrow mode
 	searching    bool // true when search input is active
 	searchQuery  string
+	filtering    bool           // true when filter overlay is shown
+	filterTypes  map[string]bool // selected type filters (OR within)
+	filterStats  map[string]bool // selected status filters (OR within)
+	filterCursor int            // cursor position in filter menu
+}
+
+// allTypes lists the bead types in display order.
+var allTypes = []string{"task", "bug", "feature", "chore", "epic", "decision"}
+
+// allStatuses lists the bead statuses in display order.
+var allStatuses = []string{"open", "in_progress", "blocked", "deferred", "closed"}
+
+// filterMenuItems returns the combined list of filter menu items (types then statuses).
+// Each item is a (label, section) pair where section is 0 for type, 1 for status.
+func filterMenuItems() []filterMenuItem {
+	var items []filterMenuItem
+	for _, t := range allTypes {
+		items = append(items, filterMenuItem{label: t, section: 0})
+	}
+	for _, s := range allStatuses {
+		items = append(items, filterMenuItem{label: s, section: 1})
+	}
+	return items
+}
+
+type filterMenuItem struct {
+	label   string
+	section int // 0 = type, 1 = status
 }
 
 // New creates a new Model with the given config.
 func New(cfg Config) Model {
-	return Model{
-		config: cfg,
+	m := Model{
+		config:      cfg,
+		filterTypes: make(map[string]bool),
+		filterStats: make(map[string]bool),
 	}
+	for _, t := range cfg.FilterTypes {
+		m.filterTypes[t] = true
+	}
+	for _, s := range cfg.FilterStatuses {
+		m.filterStats[s] = true
+	}
+	return m
 }
 
 // SetTree sets the tree model for rendering.
@@ -100,6 +139,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// In filter overlay mode, handle filter-specific keys
+		if m.filtering {
+			items := filterMenuItems()
+			switch msg.String() {
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.filtering = false
+				// Clear all filters
+				m.filterTypes = make(map[string]bool)
+				m.filterStats = make(map[string]bool)
+				m.selectedIdx = 0
+				m.treeScroll = 0
+				m.syncSelectedBead()
+			case "enter", "f":
+				m.filtering = false
+			case "j", "down":
+				if m.filterCursor < len(items)-1 {
+					m.filterCursor++
+				}
+			case "k", "up":
+				if m.filterCursor > 0 {
+					m.filterCursor--
+				}
+			case " ":
+				if m.filterCursor < len(items) {
+					item := items[m.filterCursor]
+					if item.section == 0 {
+						if m.filterTypes[item.label] {
+							delete(m.filterTypes, item.label)
+						} else {
+							m.filterTypes[item.label] = true
+						}
+					} else {
+						if m.filterStats[item.label] {
+							delete(m.filterStats, item.label)
+						} else {
+							m.filterStats[item.label] = true
+						}
+					}
+					m.selectedIdx = 0
+					m.treeScroll = 0
+					m.syncSelectedBead()
+				}
+			}
+			return m, nil
+		}
+
 		// In search mode, capture input
 		if m.searching {
 			switch msg.Type {
@@ -137,10 +224,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedIdx = 0
 				m.treeScroll = 0
 				m.syncSelectedBead()
+			} else if m.hasActiveFilters() {
+				m.filterTypes = make(map[string]bool)
+				m.filterStats = make(map[string]bool)
+				m.selectedIdx = 0
+				m.treeScroll = 0
+				m.syncSelectedBead()
 			}
 		case "/":
 			m.searching = true
 			return m, nil
+		case "f":
+			if m.focusedPane == treePane {
+				m.filtering = true
+				m.filterCursor = 0
+				return m, nil
+			}
 		case "tab":
 			if !m.isNarrow() {
 				if m.focusedPane == treePane {
@@ -205,16 +304,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// visibleNodes returns the current visible node list, filtered by search query if active.
+// hasActiveFilters returns true if any type or status filters are set.
+func (m *Model) hasActiveFilters() bool {
+	return len(m.filterTypes) > 0 || len(m.filterStats) > 0
+}
+
+// visibleNodes returns the current visible node list, filtered by search query and type/status filters.
 func (m *Model) visibleNodes() []*tree.Node {
 	if m.tree == nil {
 		return nil
 	}
 	visible := m.tree.FlattenVisible()
-	if m.searchQuery == "" {
-		return visible
+	if m.hasActiveFilters() {
+		visible = m.filterByTypeStatus(visible)
 	}
-	return m.filterBySearch(visible)
+	if m.searchQuery != "" {
+		visible = m.filterBySearch(visible)
+	}
+	return visible
+}
+
+// filterByTypeStatus returns nodes matching the active type/status filters plus their ancestors.
+func (m *Model) filterByTypeStatus(visible []*tree.Node) []*tree.Node {
+	// Find matching nodes
+	matchIDs := make(map[string]bool)
+	for _, node := range visible {
+		typeMatch := len(m.filterTypes) == 0 || m.filterTypes[node.Bead.IssueType]
+		statusMatch := len(m.filterStats) == 0 || m.filterStats[node.Bead.Status]
+		if typeMatch && statusMatch {
+			matchIDs[node.Bead.ID] = true
+		}
+	}
+
+	// Collect ancestor IDs
+	ancestorIDs := make(map[string]bool)
+	for id := range matchIDs {
+		if node, ok := m.tree.ByID[id]; ok {
+			current := node
+			for current.Bead.Parent != "" {
+				ancestorIDs[current.Bead.Parent] = true
+				if parent, ok := m.tree.ByID[current.Bead.Parent]; ok {
+					current = parent
+				} else {
+					break
+				}
+			}
+		}
+	}
+
+	var filtered []*tree.Node
+	for _, node := range visible {
+		if matchIDs[node.Bead.ID] || ancestorIDs[node.Bead.ID] {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
 }
 
 // filterBySearch returns only nodes that match the search query or are ancestors
@@ -463,6 +607,12 @@ func (m Model) View() string {
 		contentHeight = 1
 	}
 
+	// Filter overlay
+	if m.filtering {
+		filterPanel := m.renderFilterOverlay(m.width, contentHeight)
+		return lipgloss.JoinVertical(lipgloss.Left, filterPanel, statusBar)
+	}
+
 	// Full-screen overlay in narrow mode
 	if m.showOverlay {
 		detailPanel := m.renderDetailPanel(m.width, contentHeight)
@@ -518,7 +668,7 @@ func (m Model) renderTreePanel(width, height int) string {
 	visible := m.visibleNodes()
 	if len(visible) == 0 {
 		emptyMsg := "(no beads loaded)"
-		if m.searchQuery != "" {
+		if m.searchQuery != "" || m.hasActiveFilters() {
 			emptyMsg = "(no matching beads)"
 		}
 		content := header + "\n\n  " + emptyMsg
@@ -890,6 +1040,47 @@ func (m Model) colorStatus(status string) string {
 	return s.Render(status)
 }
 
+// renderFilterOverlay renders the filter menu overlay.
+func (m Model) renderFilterOverlay(width, height int) string {
+	style := lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		PaddingLeft(2)
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+	selectedStyle := lipgloss.NewStyle().Reverse(true)
+
+	var lines []string
+	lines = append(lines, titleStyle.Render("Filter Beads"))
+	lines = append(lines, "")
+	lines = append(lines, headingStyle.Render("TYPE"))
+
+	items := filterMenuItems()
+	for i, item := range items {
+		if item.section == 1 && (i == 0 || items[i-1].section == 0) {
+			lines = append(lines, "")
+			lines = append(lines, headingStyle.Render("STATUS"))
+		}
+		checked := " "
+		if item.section == 0 && m.filterTypes[item.label] {
+			checked = "x"
+		} else if item.section == 1 && m.filterStats[item.label] {
+			checked = "x"
+		}
+		row := fmt.Sprintf("  [%s] %s", checked, item.label)
+		if i == m.filterCursor {
+			row = selectedStyle.Render(row)
+		}
+		lines = append(lines, row)
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, lipgloss.NewStyle().Faint(true).Render("[Space] Toggle  [Enter/f] Apply  [Esc] Clear & Close"))
+
+	return style.Render(strings.Join(lines, "\n"))
+}
+
 func (m Model) renderStatusBar() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
@@ -908,6 +1099,35 @@ func (m Model) renderStatusBar() string {
 	// Show active search query
 	if m.searchQuery != "" {
 		left = fmt.Sprintf("Search: %q  [Esc] Clear", m.searchQuery)
+	}
+
+	// Show active filters
+	if m.hasActiveFilters() {
+		var parts []string
+		if len(m.filterTypes) > 0 {
+			var types []string
+			for _, t := range allTypes {
+				if m.filterTypes[t] {
+					types = append(types, t)
+				}
+			}
+			parts = append(parts, "type="+strings.Join(types, ","))
+		}
+		if len(m.filterStats) > 0 {
+			var statuses []string
+			for _, s := range allStatuses {
+				if m.filterStats[s] {
+					statuses = append(statuses, s)
+				}
+			}
+			parts = append(parts, "status="+strings.Join(statuses, ","))
+		}
+		filterStr := "Filter: " + strings.Join(parts, " ")
+		if m.searchQuery != "" {
+			left += "  " + filterStr
+		} else {
+			left = filterStr + "  [Esc] Clear"
+		}
 	}
 
 	right := fmt.Sprintf("Refresh: %ds", m.config.Refresh)

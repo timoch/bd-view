@@ -36,6 +36,8 @@ func main() {
 	rootCmd.Flags().IntVar(&cfg.Refresh, "refresh", 2, "Refresh interval in seconds")
 	rootCmd.Flags().BoolVar(&cfg.ExpandAll, "expand-all", false, "Start with all tree nodes expanded")
 	rootCmd.Flags().BoolVar(&cfg.NoColor, "no-color", false, "Disable color output")
+	rootCmd.Flags().StringSliceVar(&cfg.FilterTypes, "type", nil, "Filter by bead type (can specify multiple)")
+	rootCmd.Flags().StringSliceVar(&cfg.FilterStatuses, "status", nil, "Filter by bead status (can specify multiple)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

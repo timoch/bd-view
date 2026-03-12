@@ -1580,3 +1580,374 @@ func TestLayout_RightExpandsInNarrowMode(t *testing.T) {
 		t.Errorf("expected 2 visible after Right expand, got %d", len(visible))
 	}
 }
+
+// --- Filter tests ---
+
+func TestFilter_FOpensFilterOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m = updated.(Model)
+
+	if !m.filtering {
+		t.Error("expected filter overlay to be open after pressing f")
+	}
+}
+
+func TestFilter_OverlayRendersTypesAndStatuses(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+
+	output := m.View()
+	if !strings.Contains(output, "Filter Beads") {
+		t.Error("expected filter overlay title")
+	}
+	if !strings.Contains(output, "TYPE") {
+		t.Error("expected TYPE heading in filter overlay")
+	}
+	if !strings.Contains(output, "STATUS") {
+		t.Error("expected STATUS heading in filter overlay")
+	}
+	if !strings.Contains(output, "task") {
+		t.Error("expected task type in filter overlay")
+	}
+	if !strings.Contains(output, "open") {
+		t.Error("expected open status in filter overlay")
+	}
+}
+
+func TestFilter_SpaceTogglesSelection(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+	m.filterCursor = 0 // "task" is first item
+
+	// Toggle task on
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+
+	if !m.filterTypes["task"] {
+		t.Error("expected task filter to be enabled after space toggle")
+	}
+
+	// Toggle task off
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+
+	if m.filterTypes["task"] {
+		t.Error("expected task filter to be disabled after second space toggle")
+	}
+}
+
+func TestFilter_NavigateFilterMenu(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+	m.filterCursor = 0
+
+	// Move down
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.filterCursor != 1 {
+		t.Errorf("expected cursor at 1 after j, got %d", m.filterCursor)
+	}
+
+	// Move up
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	if m.filterCursor != 0 {
+		t.Errorf("expected cursor at 0 after k, got %d", m.filterCursor)
+	}
+}
+
+func TestFilter_EnterClosesOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.filtering {
+		t.Error("expected filter overlay to close on Enter")
+	}
+}
+
+func TestFilter_EscClearsFiltersAndCloses(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+	m.filterTypes["task"] = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.filtering {
+		t.Error("expected filter overlay to close on Esc")
+	}
+	if len(m.filterTypes) > 0 {
+		t.Error("expected filters to be cleared on Esc")
+	}
+}
+
+func TestFilter_TypeFilterShowsOnlyMatchingTypes(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "open"},
+		{ID: "b-3", IssueType: "feature", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 {
+		t.Errorf("expected 1 visible bead with task filter, got %d", len(visible))
+		return
+	}
+	if visible[0].Bead.ID != "b-1" {
+		t.Errorf("expected b-1, got %s", visible[0].Bead.ID)
+	}
+}
+
+func TestFilter_StatusFilterShowsOnlyMatchingStatuses(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "closed"},
+		{ID: "b-3", IssueType: "task", Status: "blocked"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterStats["closed"] = true
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 {
+		t.Errorf("expected 1 visible bead with closed filter, got %d", len(visible))
+		return
+	}
+	if visible[0].Bead.ID != "b-2" {
+		t.Errorf("expected b-2, got %s", visible[0].Bead.ID)
+	}
+}
+
+func TestFilter_ORWithinCategory(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "open"},
+		{ID: "b-3", IssueType: "feature", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+	m.filterTypes["bug"] = true
+
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected 2 visible beads with task|bug filter, got %d", len(visible))
+	}
+}
+
+func TestFilter_ANDAcrossCategories(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "closed"},
+		{ID: "b-3", IssueType: "bug", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+	m.filterStats["open"] = true
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 {
+		t.Errorf("expected 1 visible bead with task AND open filter, got %d", len(visible))
+		return
+	}
+	if visible[0].Bead.ID != "b-1" {
+		t.Errorf("expected b-1, got %s", visible[0].Bead.ID)
+	}
+}
+
+func TestFilter_AncestorsPreserved(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "epic-1", IssueType: "epic", Status: "open"},
+		{ID: "task-1", IssueType: "task", Status: "open", Parent: "epic-1"},
+		{ID: "bug-1", IssueType: "bug", Status: "open", Parent: "epic-1"},
+	}
+	m := modelWithTree(beads, true)
+	m.filterTypes["task"] = true
+
+	visible := m.visibleNodes()
+	ids := make(map[string]bool)
+	for _, n := range visible {
+		ids[n.Bead.ID] = true
+	}
+	if !ids["task-1"] {
+		t.Error("expected matching task-1")
+	}
+	if !ids["epic-1"] {
+		t.Error("expected ancestor epic-1 preserved")
+	}
+	if ids["bug-1"] {
+		t.Error("expected non-matching bug-1 filtered out")
+	}
+}
+
+func TestFilter_StatusBarShowsActiveFilter(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+	m.filterStats["open"] = true
+
+	output := m.View()
+	if !strings.Contains(output, "Filter: type=task status=open") {
+		t.Error("expected status bar to show active filter")
+	}
+}
+
+func TestFilter_EscClearsActiveFiltersOutsideOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+
+	// Not in filter overlay, press Esc
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.hasActiveFilters() {
+		t.Error("expected Esc to clear active filters")
+	}
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected full tree after clearing filters, got %d", len(visible))
+	}
+}
+
+func TestFilter_EmptyResultsMessage(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["bug"] = true // no bugs exist
+
+	output := m.View()
+	if !strings.Contains(output, "(no matching beads)") {
+		t.Error("expected 'no matching beads' when filter produces no results")
+	}
+}
+
+func TestFilter_CLIFlagsApplyInitialFilters(t *testing.T) {
+	cfg := Config{
+		Refresh:        2,
+		FilterTypes:    []string{"task", "bug"},
+		FilterStatuses: []string{"open"},
+	}
+	m := New(cfg)
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	if !m.filterTypes["task"] || !m.filterTypes["bug"] {
+		t.Error("expected CLI --type flags to set initial type filters")
+	}
+	if !m.filterStats["open"] {
+		t.Error("expected CLI --status flag to set initial status filter")
+	}
+}
+
+func TestFilter_CombinedWithSearch(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha task", IssueType: "task", Status: "open"},
+		{ID: "b-2", Title: "Beta task", IssueType: "task", Status: "open"},
+		{ID: "b-3", Title: "Alpha bug", IssueType: "bug", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+	m.searchQuery = "Alpha"
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 {
+		t.Errorf("expected 1 visible with task filter + Alpha search, got %d", len(visible))
+		return
+	}
+	if visible[0].Bead.ID != "b-1" {
+		t.Errorf("expected b-1, got %s", visible[0].Bead.ID)
+	}
+}
+
+func TestFilter_FClosesOverlayToo(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	m = updated.(Model)
+
+	if m.filtering {
+		t.Error("expected f to close filter overlay")
+	}
+}
+
+func TestFilter_ToggleStatusInOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+	// Navigate to first status item (after 6 type items)
+	m.filterCursor = len(allTypes) // first status item
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = updated.(Model)
+
+	if !m.filterStats["open"] {
+		t.Error("expected open status to be toggled on")
+	}
+}
+
+func TestFilter_SearchClearsBeforeFilter(t *testing.T) {
+	// When Esc is pressed, search clears first, then filters on next Esc
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "bug", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+	m.filterTypes["task"] = true
+	m.searchQuery = "b-1"
+
+	// First Esc clears search
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.searchQuery != "" {
+		t.Error("expected search to be cleared first")
+	}
+	if !m.hasActiveFilters() {
+		t.Error("expected filters to remain after first Esc")
+	}
+
+	// Second Esc clears filters
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+	if m.hasActiveFilters() {
+		t.Error("expected filters to be cleared on second Esc")
+	}
+}
