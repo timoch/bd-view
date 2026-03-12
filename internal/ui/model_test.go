@@ -2094,6 +2094,113 @@ func TestHelp_StatusBarShowsHelpHint(t *testing.T) {
 	}
 }
 
+func TestHelp_ScrollDownInOverlay(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.helpScroll != 1 {
+		t.Errorf("expected helpScroll=1 after j, got %d", m.helpScroll)
+	}
+	if !m.showHelp {
+		t.Error("expected help overlay to remain open after scrolling")
+	}
+}
+
+func TestHelp_ScrollUpInOverlay(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+	m.helpScroll = 3
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+
+	if m.helpScroll != 2 {
+		t.Errorf("expected helpScroll=2 after k, got %d", m.helpScroll)
+	}
+}
+
+func TestHelp_ScrollUpStopsAtZero(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+	m.helpScroll = 0
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+
+	if m.helpScroll != 0 {
+		t.Errorf("expected helpScroll=0, got %d", m.helpScroll)
+	}
+}
+
+func TestHelp_ScrollResetsOnClose(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.showHelp = true
+	m.helpScroll = 5
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.helpScroll != 0 {
+		t.Errorf("expected helpScroll reset to 0 on close, got %d", m.helpScroll)
+	}
+}
+
+func TestHelp_RegistryDrivesOverlay(t *testing.T) {
+	// Verify that every keybinding in the registry appears in the rendered help overlay
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 80 // tall enough to show all
+	m.ready = true
+	m.showHelp = true
+
+	output := m.View()
+
+	for _, kb := range keybindingRegistry {
+		if !strings.Contains(output, kb.Keys) {
+			t.Errorf("expected help overlay to contain key %q from registry", kb.Keys)
+		}
+		if !strings.Contains(output, kb.Description) {
+			t.Errorf("expected help overlay to contain description %q from registry", kb.Description)
+		}
+	}
+	for _, section := range sectionOrder {
+		if !strings.Contains(output, section) {
+			t.Errorf("expected help overlay to contain section %q", section)
+		}
+	}
+}
+
+func TestHelp_OverlayScrollsWithSmallHeight(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 28 // small height: content area = 27 lines (minus 1 for status bar)
+	m.ready = true
+	m.showHelp = true
+	m.helpScroll = 5
+
+	output := m.View()
+
+	// The scrolled output should not show the title line (it's above the scroll offset)
+	if strings.Contains(output, "Help — Keybindings") {
+		t.Error("expected title to be scrolled off screen with helpScroll=5")
+	}
+}
+
 // --- Refresh tests ---
 
 func TestRefresh_ApplyRefreshBuildsTree(t *testing.T) {

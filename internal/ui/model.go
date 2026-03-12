@@ -60,6 +60,7 @@ type Model struct {
 	filterStats  map[string]bool // selected status filters (OR within)
 	filterCursor int            // cursor position in filter menu
 	showHelp     bool           // true when help overlay is shown
+	helpScroll   int            // scroll offset within help overlay
 	fetcher      *data.Fetcher  // fetcher for bd CLI data
 	beads        []data.Bead    // current in-memory bead list
 	lastRefresh  time.Time      // time of last successful refresh
@@ -176,6 +177,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "esc", "?":
 				m.showHelp = false
+				m.helpScroll = 0
+			case "j", "down":
+				m.helpScroll++
+			case "k", "up":
+				if m.helpScroll > 0 {
+					m.helpScroll--
+				}
 			}
 			return m, nil
 		}
@@ -1188,7 +1196,7 @@ func (m Model) colorStatus(status string) string {
 	return s.Render(status)
 }
 
-// renderHelpOverlay renders the help overlay with all keybindings.
+// renderHelpOverlay renders the help overlay from the keybinding registry.
 func (m Model) renderHelpOverlay(width, height int) string {
 	style := lipgloss.NewStyle().
 		Width(width).
@@ -1199,36 +1207,47 @@ func (m Model) renderHelpOverlay(width, height int) string {
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	keyStyle := lipgloss.NewStyle().Bold(true)
 
+	// Calculate max key width for alignment
+	maxKeyLen := 0
+	for _, kb := range keybindingRegistry {
+		if len(kb.Keys) > maxKeyLen {
+			maxKeyLen = len(kb.Keys)
+		}
+	}
+
 	var lines []string
 	lines = append(lines, titleStyle.Render("Help — Keybindings"))
 	lines = append(lines, "")
-	lines = append(lines, headingStyle.Render("NAVIGATION"))
-	lines = append(lines, fmt.Sprintf("  %s  Move selection down", keyStyle.Render("j / Down")))
-	lines = append(lines, fmt.Sprintf("  %s    Move selection up", keyStyle.Render("k / Up")))
-	lines = append(lines, fmt.Sprintf("  %s     Go to top", keyStyle.Render("g")))
-	lines = append(lines, fmt.Sprintf("  %s     Go to bottom", keyStyle.Render("G")))
-	lines = append(lines, fmt.Sprintf("  %s   Switch focus (tree / detail)", keyStyle.Render("Tab")))
-	lines = append(lines, "")
-	lines = append(lines, headingStyle.Render("TREE"))
-	lines = append(lines, fmt.Sprintf("  %s  Expand node / open overlay (narrow)", keyStyle.Render("Enter")))
-	lines = append(lines, fmt.Sprintf("  %s Expand node", keyStyle.Render("Right")))
-	lines = append(lines, fmt.Sprintf("  %s  Collapse node / go to parent", keyStyle.Render("Left")))
-	lines = append(lines, fmt.Sprintf("  %s     Expand all nodes", keyStyle.Render("e")))
-	lines = append(lines, fmt.Sprintf("  %s     Collapse all nodes", keyStyle.Render("c")))
-	lines = append(lines, "")
-	lines = append(lines, headingStyle.Render("SEARCH & FILTER"))
-	lines = append(lines, fmt.Sprintf("  %s     Search by ID or title", keyStyle.Render("/")))
-	lines = append(lines, fmt.Sprintf("  %s     Open filter menu", keyStyle.Render("f")))
-	lines = append(lines, fmt.Sprintf("  %s   Clear search/filter, close overlay", keyStyle.Render("Esc")))
-	lines = append(lines, "")
-	lines = append(lines, headingStyle.Render("OTHER"))
-	lines = append(lines, fmt.Sprintf("  %s     Force refresh", keyStyle.Render("r")))
-	lines = append(lines, fmt.Sprintf("  %s     Show this help", keyStyle.Render("?")))
-	lines = append(lines, fmt.Sprintf("  %s     Quit", keyStyle.Render("q")))
-	lines = append(lines, "")
-	lines = append(lines, lipgloss.NewStyle().Faint(true).Render("[Esc/?] Close"))
 
-	return style.Render(strings.Join(lines, "\n"))
+	// Group keybindings by section in defined order
+	for _, section := range sectionOrder {
+		lines = append(lines, headingStyle.Render(section))
+		for _, kb := range keybindingRegistry {
+			if kb.Section != section {
+				continue
+			}
+			padding := strings.Repeat(" ", maxKeyLen-len(kb.Keys)+2)
+			lines = append(lines, fmt.Sprintf("  %s%s%s", keyStyle.Render(kb.Keys), padding, kb.Description))
+		}
+		lines = append(lines, "")
+	}
+
+	lines = append(lines, lipgloss.NewStyle().Faint(true).Render("[Esc/?] Close  [j/k] Scroll"))
+
+	// Apply scroll offset
+	scrollOffset := m.helpScroll
+	if scrollOffset > len(lines)-1 {
+		scrollOffset = len(lines) - 1
+	}
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+	visible := lines[scrollOffset:]
+	if len(visible) > height {
+		visible = visible[:height]
+	}
+
+	return style.Render(strings.Join(visible, "\n"))
 }
 
 // renderFilterOverlay renders the filter menu overlay.
