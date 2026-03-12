@@ -885,9 +885,9 @@ func (m Model) treeWidth() int {
 }
 
 func (m Model) renderTreePanel(width, height int) string {
-	borderColor := lipgloss.Color("240")
+	borderColor := colorBorderNormal
 	if m.focusedPane == treePane {
-		borderColor = lipgloss.Color("86")
+		borderColor = colorAccentPrimary
 	}
 	style := lipgloss.NewStyle().
 		Width(width).
@@ -898,7 +898,7 @@ func (m Model) renderTreePanel(width, height int) string {
 
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	if m.focusedPane == treePane {
-		headerStyle = headerStyle.Foreground(lipgloss.Color("86"))
+		headerStyle = headerStyle.Foreground(colorAccentPrimary)
 	}
 	header := headerStyle.Render("Beads")
 
@@ -1011,11 +1011,11 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth i
 		var progressStyle lipgloss.Style
 		switch {
 		case done == total:
-			progressStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+			progressStyle = lipgloss.NewStyle().Foreground(colorProgressDone)
 		case done == 0:
 			progressStyle = lipgloss.NewStyle().Faint(true)
 		default:
-			progressStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // yellow
+			progressStyle = lipgloss.NewStyle().Foreground(colorProgressPartial)
 		}
 		base = base + "  " + progressStyle.Render(progress)
 	}
@@ -1061,16 +1061,16 @@ func (m Model) statusIcon(status string) string {
 		s = lipgloss.NewStyle()
 	case "in_progress":
 		icon = "(~)"
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+		s = lipgloss.NewStyle().Foreground(colorStatusInProgress)
 	case "blocked":
 		icon = "(!)"
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+		s = lipgloss.NewStyle().Foreground(colorStatusBlocked)
 	case "deferred":
 		icon = "(z)"
-		s = lipgloss.NewStyle().Faint(true)
+		s = lipgloss.NewStyle().Faint(true).Foreground(colorStatusDeferred)
 	case "closed":
 		icon = "(x)"
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("34"))
+		s = lipgloss.NewStyle().Foreground(colorStatusClosed)
 	default:
 		icon = "( )"
 		s = lipgloss.NewStyle()
@@ -1120,7 +1120,7 @@ func (m Model) renderDetailPanel(width, height int) string {
 	// Title line: bead ID as pane title
 	titleStyle := lipgloss.NewStyle().Bold(true)
 	if m.focusedPane == detailPane || m.showOverlay {
-		titleStyle = titleStyle.Foreground(lipgloss.Color("86"))
+		titleStyle = titleStyle.Foreground(colorAccentPrimary)
 	}
 	lines = append(lines, titleStyle.Render(b.ID))
 	lines = append(lines, strings.Repeat("─", contentWidth))
@@ -1269,13 +1269,13 @@ func (m Model) colorStatus(status string) string {
 	case "open":
 		s = lipgloss.NewStyle()
 	case "in_progress":
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+		s = lipgloss.NewStyle().Foreground(colorStatusInProgress)
 	case "blocked":
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+		s = lipgloss.NewStyle().Foreground(colorStatusBlocked)
 	case "deferred":
-		s = lipgloss.NewStyle().Faint(true)
+		s = lipgloss.NewStyle().Faint(true).Foreground(colorStatusDeferred)
 	case "closed":
-		s = lipgloss.NewStyle().Foreground(lipgloss.Color("34"))
+		s = lipgloss.NewStyle().Foreground(colorStatusClosed)
 	default:
 		s = lipgloss.NewStyle()
 	}
@@ -1289,7 +1289,7 @@ func (m Model) renderHelpOverlay(width, height int) string {
 		Height(height).
 		PaddingLeft(2)
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorAccentPrimary)
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	keyStyle := lipgloss.NewStyle().Bold(true)
 
@@ -1343,7 +1343,7 @@ func (m Model) renderFilterOverlay(width, height int) string {
 		Height(height).
 		PaddingLeft(2)
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorAccentPrimary)
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	selectedStyle := lipgloss.NewStyle().Reverse(true)
 
@@ -1380,8 +1380,8 @@ func (m Model) renderFilterOverlay(width, height int) string {
 func (m Model) renderStatusBar() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
-		Background(lipgloss.Color("237")).
-		Foreground(lipgloss.Color("252"))
+		Background(colorStatusBarBg).
+		Foreground(colorStatusBarFg)
 
 	// Search input mode
 	if m.searching {
