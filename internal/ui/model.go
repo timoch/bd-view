@@ -414,16 +414,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.showHelp || m.showOverlay || m.filtering || m.searching {
 				return m, nil
 			}
-			// In narrow mode, no panel split exists — ignore
+
+			inTreePanel := false
 			if m.isNarrow() {
-				return m, nil
-			}
-			// Determine which panel was clicked based on X coordinate
-			tw := m.treeWidth()
-			if msg.X < tw {
-				m.focusedPane = treePane
+				// In narrow mode, tree takes full width
+				inTreePanel = true
 			} else {
-				m.focusedPane = detailPane
+				tw := m.treeWidth()
+				if msg.X < tw {
+					inTreePanel = true
+				} else {
+					m.focusedPane = detailPane
+				}
+			}
+
+			if inTreePanel {
+				m.focusedPane = treePane
+				// Calculate clicked row index: subtract 1 for header, add scroll offset
+				clickedRow := msg.Y - 1 + m.treeScroll
+				if msg.Y >= 1 { // Ignore clicks on header row
+					visible := m.visibleNodes()
+					if clickedRow >= 0 && clickedRow < len(visible) {
+						m.selectedIdx = clickedRow
+						m.syncSelectedBead()
+					}
+				}
 			}
 		}
 		return m, nil

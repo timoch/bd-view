@@ -2769,3 +2769,183 @@ func TestMouse_ReleaseIgnored(t *testing.T) {
 		t.Error("expected focus unchanged on mouse release")
 	}
 }
+
+func TestMouse_ClickTreeRowSelectsBead(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.focusedPane = detailPane
+
+	// Click on row index 2 (Y=3: header=0, row0=1, row1=2, row2=3)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 3,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 2 {
+		t.Errorf("expected selectedIdx=2, got %d", m.selectedIdx)
+	}
+	if m.focusedPane != treePane {
+		t.Error("expected focus on tree pane after clicking tree row")
+	}
+	if m.selectedBead == nil || m.selectedBead.ID != "b-3" {
+		t.Error("expected selected bead to be b-3")
+	}
+}
+
+func TestMouse_ClickTreeRowWithScrollOffset(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+		{ID: "b-4", IssueType: "task", Status: "open"},
+		{ID: "b-5", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.treeScroll = 2 // Scrolled down by 2
+
+	// Click Y=1 (first visible row after header), with scroll=2, should select index 2
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 1,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 2 {
+		t.Errorf("expected selectedIdx=2 (scroll offset 2 + row 0), got %d", m.selectedIdx)
+	}
+}
+
+func TestMouse_ClickHeaderRowIgnored(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+
+	// Click on header row (Y=0)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 0,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx unchanged at 0, got %d", m.selectedIdx)
+	}
+}
+
+func TestMouse_ClickBelowLastRowIgnored(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+
+	// Click well below the last row (Y=20, only 2 rows)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 20,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx unchanged at 0, got %d", m.selectedIdx)
+	}
+}
+
+func TestMouse_ClickIgnoredDuringSearch(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.searching = true
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 2,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx unchanged during search, got %d", m.selectedIdx)
+	}
+}
+
+func TestMouse_ClickIgnoredDuringFilter(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.filtering = true
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 2,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx unchanged during filter, got %d", m.selectedIdx)
+	}
+}
+
+func TestMouse_ClickTreeRowInNarrowMode(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95 // narrow mode
+	m.selectedIdx = 0
+
+	// Click on second row (Y=2)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 2,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx=1 in narrow mode, got %d", m.selectedIdx)
+	}
+	if m.selectedBead == nil || m.selectedBead.ID != "b-2" {
+		t.Error("expected selected bead to be b-2 in narrow mode")
+	}
+}
+
+func TestMouse_ClickTreeRowThenKeyboardNavigation(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Click to select second row
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 2,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx=1 after click, got %d", m.selectedIdx)
+	}
+
+	// Navigate down with keyboard
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.selectedIdx != 2 {
+		t.Errorf("expected selectedIdx=2 after j key, got %d", m.selectedIdx)
+	}
+}
