@@ -1,5 +1,5 @@
 Beads                                           │ proj-1                                                                
-[-] proj-1  epic  (~)  [1/3]  Epic: Project set…│ ───────────────────────────────────────────────────────────────────── 
+▼ proj-1  epic  (~)  [1/3]  Epic: Project setup │ ───────────────────────────────────────────────────────────────────── 
 ├── proj-1.1  task  (x)  Set up CI pipeline     │ Title:  Epic: Project setup                                           
 ├── proj-1.2  task  ( )  Configure linting      │ Type:   epic         Status: in_progress                              
 └── proj-1.3  task  (!)  Write integration tests│ Priority: 0          Owner: dev@test.com                              

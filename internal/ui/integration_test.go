@@ -83,7 +83,7 @@ func TestIntegration_ExpandCollapse(t *testing.T) {
 	// Wait for tree to load — children should not be visible initially
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
-		return containsAll(s, "proj-1", "[+]") // collapsed indicator
+		return containsAll(s, "proj-1", "▶") // collapsed indicator
 	}, teatest.WithDuration(5*time.Second))
 
 	// Expand proj-1 with Right arrow
@@ -92,7 +92,7 @@ func TestIntegration_ExpandCollapse(t *testing.T) {
 	// Children should now be visible
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
-		return containsAll(s, "proj-1.1", "proj-1.2", "proj-1.3", "[-]")
+		return containsAll(s, "proj-1.1", "proj-1.2", "proj-1.3", "▼")
 	}, teatest.WithDuration(3*time.Second))
 
 	// Collapse with Left arrow
@@ -101,7 +101,7 @@ func TestIntegration_ExpandCollapse(t *testing.T) {
 	// Children should be hidden again
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		s := string(bts)
-		return containsAll(s, "[+]") && !containsAll(s, "proj-1.1")
+		return containsAll(s, "▶") && !containsAll(s, "proj-1.1")
 	}, teatest.WithDuration(3*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})

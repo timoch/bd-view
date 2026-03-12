@@ -987,9 +987,9 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth i
 	expandIndicator := ""
 	if len(node.Children) > 0 {
 		if node.Expanded {
-			expandIndicator = "[-] "
+			expandIndicator = "▼ "
 		} else {
-			expandIndicator = "[+] "
+			expandIndicator = "▶ "
 		}
 	}
 

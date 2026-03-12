@@ -620,15 +620,15 @@ func TestTreePanel_ExpandCollapseIndicators(t *testing.T) {
 	// Collapsed
 	m := modelWithTree(beads, false)
 	output := m.View()
-	if !strings.Contains(output, "[+]") {
-		t.Error("expected [+] for collapsed parent")
+	if !strings.Contains(output, "▶") {
+		t.Error("expected ▶ for collapsed parent")
 	}
 
 	// Expanded
 	m = modelWithTree(beads, true)
 	output = m.View()
-	if !strings.Contains(output, "[-]") {
-		t.Error("expected [-] for expanded parent")
+	if !strings.Contains(output, "▼") {
+		t.Error("expected ▼ for expanded parent")
 	}
 }
 
