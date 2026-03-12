@@ -72,7 +72,8 @@ type Model struct {
 	beads        []data.Bead    // current in-memory bead list
 	lastRefresh  time.Time      // time of last successful refresh
 	nowFunc      func() time.Time // for testing; defaults to time.Now
-	statusMsg    string           // temporary status bar message (e.g., "Copied: bd-view-0ny.3")
+	statusMsg          string // temporary status bar message (e.g., "Copied: bd-view-0ny.3")
+	lastSelectedBeadID string // tracks bead ID to detect selection changes
 }
 
 // allTypes lists the bead types in display order.
@@ -132,6 +133,11 @@ func (m *Model) SetSelectedBead(b *data.Bead) {
 	m.selectedBead = b
 	m.dependents = nil
 	m.detailScroll = 0
+	if b != nil {
+		m.lastSelectedBeadID = b.ID
+	} else {
+		m.lastSelectedBeadID = ""
+	}
 }
 
 // SetSelectedBeadDetail sets the bead and its dependents for the detail pane.
@@ -139,9 +145,11 @@ func (m *Model) SetSelectedBeadDetail(detail *data.BeadDetail) {
 	if detail == nil {
 		m.selectedBead = nil
 		m.dependents = nil
+		m.lastSelectedBeadID = ""
 	} else {
 		m.selectedBead = &detail.Bead
 		m.dependents = detail.Dependents
+		m.lastSelectedBeadID = detail.Bead.ID
 	}
 	m.detailScroll = 0
 }
@@ -635,11 +643,14 @@ func (m *Model) filterBySearch(visible []*tree.Node) []*tree.Node {
 
 // syncSelectedBead updates the selected bead from the current tree selection
 // and adjusts treeScroll to keep the selection visible.
+// Resets detailScroll to 0 only when the selected bead changes;
+// preserves it (clamped) when the same bead is re-selected (e.g., on refresh).
 func (m *Model) syncSelectedBead() {
 	visible := m.visibleNodes()
 	if len(visible) == 0 {
 		m.selectedBead = nil
 		m.dependents = nil
+		m.lastSelectedBeadID = ""
 		return
 	}
 	if m.selectedIdx >= len(visible) {
@@ -651,7 +662,10 @@ func (m *Model) syncSelectedBead() {
 	b := visible[m.selectedIdx].Bead
 	m.selectedBead = &b
 	m.dependents = nil
-	m.detailScroll = 0
+	if b.ID != m.lastSelectedBeadID {
+		m.detailScroll = 0
+		m.lastSelectedBeadID = b.ID
+	}
 	m.ensureSelectedVisible()
 }
 
