@@ -1015,7 +1015,11 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth i
 	typeLabel := shortType(node.Bead.IssueType)
 	statusIcon := m.statusIcon(node.Bead.Status)
 
-	base := fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, node.Bead.ID, typeLabel, statusIcon)
+	id := node.Bead.ID
+	if m.searchQuery != "" {
+		id = highlightSearchMatches(id, m.searchQuery)
+	}
+	base := fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, id, typeLabel, statusIcon)
 
 	// Append progress indicator for nodes with children
 	if len(node.Children) > 0 {
@@ -1050,7 +1054,11 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth i
 				title = string(titleRunes[:available-1]) + "…"
 			}
 			titleStyle := lipgloss.NewStyle().Faint(true)
-			base = base + "  " + titleStyle.Render(title)
+			styledTitle := titleStyle.Render(title)
+			if m.searchQuery != "" {
+				styledTitle = highlightSearchMatches(styledTitle, m.searchQuery)
+			}
+			base = base + "  " + styledTitle
 		}
 	}
 
@@ -1146,7 +1154,11 @@ func (m Model) renderDetailPanel(width, height int) string {
 
 	// Title field displayed prominently
 	if b.Title != "" {
-		lines = append(lines, fmt.Sprintf("Title:  %s", b.Title))
+		titleText := b.Title
+		if m.searchQuery != "" {
+			titleText = highlightSearchMatches(titleText, m.searchQuery)
+		}
+		lines = append(lines, fmt.Sprintf("Title:  %s", titleText))
 	}
 
 	// Metadata row: Type, Status (with color), Priority, Owner
@@ -1195,6 +1207,9 @@ func (m Model) renderDetailPanel(width, height int) string {
 		lines = append(lines, "")
 		lines = append(lines, headingStyle.Render(sec.heading))
 		rendered := m.renderMarkdown(sec.content, contentWidth)
+		if m.searchQuery != "" {
+			rendered = highlightSearchMatches(rendered, m.searchQuery)
+		}
 		lines = append(lines, rendered)
 	}
 
