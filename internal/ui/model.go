@@ -885,11 +885,16 @@ func (m Model) treeWidth() int {
 }
 
 func (m Model) renderTreePanel(width, height int) string {
+	borderColor := lipgloss.Color("240")
+	if m.focusedPane == treePane {
+		borderColor = lipgloss.Color("86")
+	}
 	style := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
 		BorderRight(true).
-		BorderStyle(lipgloss.NormalBorder())
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(borderColor)
 
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	if m.focusedPane == treePane {
