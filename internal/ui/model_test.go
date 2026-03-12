@@ -1348,6 +1348,86 @@ func TestSearch_MatchesByID(t *testing.T) {
 	}
 }
 
+func TestSearch_MatchesByDescription(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "t-1", Title: "First", IssueType: "task", Status: "open", Description: "Configure the database"},
+		{ID: "t-2", Title: "Second", IssueType: "task", Status: "open", Description: "Setup the frontend"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "database" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "t-1" {
+		t.Errorf("expected search by description to match t-1, got %d results", len(visible))
+	}
+}
+
+func TestSearch_MatchesByDesign(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "t-1", Title: "First", IssueType: "task", Status: "open", Design: "Use PostgreSQL adapter"},
+		{ID: "t-2", Title: "Second", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "postgresql" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "t-1" {
+		t.Errorf("expected search by design to match t-1, got %d results", len(visible))
+	}
+}
+
+func TestSearch_MatchesByAcceptanceCriteria(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "t-1", Title: "First", IssueType: "task", Status: "open", AcceptanceCriteria: "All endpoints return JSON"},
+		{ID: "t-2", Title: "Second", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "endpoints" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "t-1" {
+		t.Errorf("expected search by acceptance criteria to match t-1, got %d results", len(visible))
+	}
+}
+
+func TestSearch_MatchesByNotes(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "t-1", Title: "First", IssueType: "task", Status: "open", Notes: "Refer to architecture doc"},
+		{ID: "t-2", Title: "Second", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "architecture" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "t-1" {
+		t.Errorf("expected search by notes to match t-1, got %d results", len(visible))
+	}
+}
+
 func TestSearch_AncestorsPreserved(t *testing.T) {
 	beads := []data.Bead{
 		{ID: "epic-1", Title: "The Epic", IssueType: "epic", Status: "open"},
@@ -2042,7 +2122,7 @@ func TestHelp_OverlayRendersKeybindings(t *testing.T) {
 		"Left",
 		"Expand all",
 		"Collapse all",
-		"Search by ID",
+		"Search by ID, title, or content",
 		"filter menu",
 		"Force refresh",
 		"Quit",

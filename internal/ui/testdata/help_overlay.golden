@@ -16,7 +16,7 @@
     c         Collapse all nodes                                                                                        
                                                                                                                         
   SEARCH & FILTER                                                                                                       
-    /         Search by ID or title                                                                                     
+    /         Search by ID, title, or content                                                                           
     f         Open filter menu                                                                                          
     Esc       Clear search/filter, close overlay                                                                        
                                                                                                                         

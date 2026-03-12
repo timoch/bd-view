@@ -511,9 +511,13 @@ func (m *Model) filterBySearch(visible []*tree.Node) []*tree.Node {
 	// First pass: find all matching bead IDs
 	matchIDs := make(map[string]bool)
 	for _, node := range visible {
-		id := strings.ToLower(node.Bead.ID)
-		title := strings.ToLower(node.Bead.Title)
-		if strings.Contains(id, query) || strings.Contains(title, query) {
+		b := node.Bead
+		if strings.Contains(strings.ToLower(b.ID), query) ||
+			strings.Contains(strings.ToLower(b.Title), query) ||
+			strings.Contains(strings.ToLower(b.Description), query) ||
+			strings.Contains(strings.ToLower(b.Design), query) ||
+			strings.Contains(strings.ToLower(b.AcceptanceCriteria), query) ||
+			strings.Contains(strings.ToLower(b.Notes), query) {
 			matchIDs[node.Bead.ID] = true
 		}
 	}

@@ -26,7 +26,7 @@ var keybindingRegistry = []Keybinding{
 	{Keys: "c", Description: "Collapse all nodes", Section: "TREE"},
 
 	// Search & Filter
-	{Keys: "/", Description: "Search by ID or title", Section: "SEARCH & FILTER"},
+	{Keys: "/", Description: "Search by ID, title, or content", Section: "SEARCH & FILTER"},
 	{Keys: "f", Description: "Open filter menu", Section: "SEARCH & FILTER"},
 	{Keys: "Esc", Description: "Clear search/filter, close overlay", Section: "SEARCH & FILTER"},
 
