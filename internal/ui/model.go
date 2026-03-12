@@ -39,6 +39,7 @@ type Model struct {
 	dependents   []data.RelatedBead
 	focusedPane  paneID
 	detailScroll int
+	showOverlay  bool // full-screen detail overlay in narrow mode
 }
 
 // New creates a new Model with the given config.
@@ -80,14 +81,35 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// In overlay mode, handle overlay-specific keys first
+		if m.showOverlay {
+			switch msg.String() {
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.showOverlay = false
+			case "j", "down":
+				m.detailScroll++
+			case "k", "up":
+				if m.detailScroll > 0 {
+					m.detailScroll--
+				}
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			// Clear any future filters/search (placeholder for now)
 		case "tab":
-			if m.focusedPane == treePane {
-				m.focusedPane = detailPane
-			} else {
-				m.focusedPane = treePane
+			if !m.isNarrow() {
+				if m.focusedPane == treePane {
+					m.focusedPane = detailPane
+				} else {
+					m.focusedPane = treePane
+				}
 			}
 		case "j", "down":
 			if m.focusedPane == detailPane {
@@ -103,7 +125,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.moveSelectionUp()
 			}
-		case "enter", "right":
+		case "enter":
+			if m.focusedPane == treePane {
+				if m.isNarrow() && m.selectedBead != nil {
+					m.showOverlay = true
+					m.detailScroll = 0
+				} else {
+					m.expandSelected()
+				}
+			}
+		case "right":
 			if m.focusedPane == treePane {
 				m.expandSelected()
 			}
@@ -324,15 +355,41 @@ func (m *Model) collapseAllNodes() {
 	m.syncSelectedBead()
 }
 
+// isNarrow returns true when the terminal is too narrow for side-by-side layout.
+func (m Model) isNarrow() bool {
+	return m.width < 100
+}
+
+// isTooSmall returns true when the terminal is below the minimum supported size.
+func (m Model) isTooSmall() bool {
+	return m.width < 80 || m.height < 24
+}
+
 func (m Model) View() string {
 	if !m.ready {
 		return "Loading..."
+	}
+
+	if m.isTooSmall() {
+		return fmt.Sprintf("Terminal too small (%dx%d). Minimum size: 80x24.", m.width, m.height)
 	}
 
 	statusBar := m.renderStatusBar()
 	contentHeight := m.height - lipgloss.Height(statusBar)
 	if contentHeight < 1 {
 		contentHeight = 1
+	}
+
+	// Full-screen overlay in narrow mode
+	if m.showOverlay {
+		detailPanel := m.renderDetailPanel(m.width, contentHeight)
+		return lipgloss.JoinVertical(lipgloss.Left, detailPanel, statusBar)
+	}
+
+	if m.isNarrow() {
+		// Narrow mode: tree only, full width
+		treePanel := m.renderTreePanel(m.width, contentHeight)
+		return lipgloss.JoinVertical(lipgloss.Left, treePanel, statusBar)
 	}
 
 	treeWidth := m.treeWidth()
@@ -364,7 +421,11 @@ func (m Model) renderTreePanel(width, height int) string {
 		BorderRight(true).
 		BorderStyle(lipgloss.NormalBorder())
 
-	header := lipgloss.NewStyle().Bold(true).Render("Beads")
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	if m.focusedPane == treePane {
+		headerStyle = headerStyle.Foreground(lipgloss.Color("86"))
+	}
+	header := headerStyle.Render("Beads")
 
 	if m.tree == nil {
 		content := header + "\n\n  (no beads loaded)"
@@ -540,6 +601,9 @@ func (m Model) renderDetailPanel(width, height int) string {
 
 	// Title line: bead ID as pane title
 	titleStyle := lipgloss.NewStyle().Bold(true)
+	if m.focusedPane == detailPane || m.showOverlay {
+		titleStyle = titleStyle.Foreground(lipgloss.Color("86"))
+	}
 	lines = append(lines, titleStyle.Render(b.ID))
 	lines = append(lines, strings.Repeat("─", contentWidth))
 

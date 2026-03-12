@@ -280,7 +280,7 @@ func TestDetailPanel_NoDependenciesSection(t *testing.T) {
 func TestDetailPanel_Scrolling(t *testing.T) {
 	m := New(Config{Refresh: 2})
 	m.width = 120
-	m.height = 10
+	m.height = 30
 	m.ready = true
 
 	bead := &data.Bead{
@@ -968,7 +968,7 @@ func TestNavigation_ScrollKeepsSelectionVisible(t *testing.T) {
 		})
 	}
 	m := modelWithTree(beads, false)
-	m.height = 12 // small viewport (11 rows for tree after header)
+	m.height = 25 // small viewport (24 rows for tree after header)
 
 	// Navigate to the bottom
 	for i := 0; i < 49; i++ {
@@ -1007,5 +1007,223 @@ func TestTreePanel_NestedHierarchy(t *testing.T) {
 	}
 	if !strings.Contains(output, "task-1") {
 		t.Error("expected task-1 visible")
+	}
+}
+
+// --- Layout and resize tests ---
+
+func TestLayout_TooSmallTerminal(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.ready = true
+
+	// Too narrow
+	m.width = 79
+	m.height = 30
+	output := m.View()
+	if !strings.Contains(output, "Terminal too small") {
+		t.Error("expected too-small message when width < 80")
+	}
+
+	// Too short
+	m.width = 120
+	m.height = 23
+	output = m.View()
+	if !strings.Contains(output, "Terminal too small") {
+		t.Error("expected too-small message when height < 24")
+	}
+
+	// Exactly minimum should work
+	m.width = 80
+	m.height = 24
+	output = m.View()
+	if strings.Contains(output, "Terminal too small") {
+		t.Error("should not show too-small message at 80x24")
+	}
+}
+
+func TestLayout_NarrowModeHidesDetail(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "Some description"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95 // < 100, narrow mode
+	m.height = 30
+	m.SetSelectedBead(&beads[0])
+
+	output := m.View()
+	// Tree should be visible
+	if !strings.Contains(output, "b-1") {
+		t.Error("expected tree to be visible in narrow mode")
+	}
+	// Detail content should NOT be shown (no side-by-side)
+	if strings.Contains(output, "DESCRIPTION") {
+		t.Error("expected detail pane to be hidden in narrow mode")
+	}
+}
+
+func TestLayout_NarrowModeOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "Some description"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95
+	m.height = 30
+	m.syncSelectedBead()
+
+	// Press Enter to open overlay
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !m.showOverlay {
+		t.Error("expected overlay to be shown after Enter in narrow mode")
+	}
+
+	output := m.View()
+	if !strings.Contains(output, "b-1") {
+		t.Error("expected bead ID in overlay")
+	}
+}
+
+func TestLayout_NarrowModeEscClosesOverlay(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95
+	m.height = 30
+	m.syncSelectedBead()
+	m.showOverlay = true
+
+	// Press Escape to close overlay
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.showOverlay {
+		t.Error("expected overlay to be closed after Escape")
+	}
+}
+
+func TestLayout_WideModeShowsBothPanes(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "Some description"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 120
+	m.height = 30
+	m.syncSelectedBead()
+
+	output := m.View()
+	// Both tree and detail should be visible
+	if !strings.Contains(output, "Beads") {
+		t.Error("expected tree header in wide mode")
+	}
+	if !strings.Contains(output, "DESCRIPTION") {
+		t.Error("expected detail content in wide mode")
+	}
+}
+
+func TestLayout_TabDisabledInNarrowMode(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 95
+	m.height = 30
+	m.ready = true
+
+	if m.focusedPane != treePane {
+		t.Fatal("expected initial focus on tree")
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+
+	if m.focusedPane != treePane {
+		t.Error("expected Tab to be ignored in narrow mode")
+	}
+}
+
+func TestLayout_FocusSwitching(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+
+	// Default focus is tree
+	if m.focusedPane != treePane {
+		t.Error("expected initial focus on tree pane")
+	}
+
+	// Tab switches to detail
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.focusedPane != detailPane {
+		t.Error("expected focus on detail pane after Tab")
+	}
+
+	// Tab switches back
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus on tree pane after second Tab")
+	}
+}
+
+func TestLayout_ResizeAdjustsLayout(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.ready = true
+	m.width = 120
+	m.height = 40
+
+	// Simulate resize
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 150, Height: 50})
+	m = updated.(Model)
+
+	if m.width != 150 || m.height != 50 {
+		t.Errorf("expected dimensions 150x50, got %dx%d", m.width, m.height)
+	}
+}
+
+func TestLayout_OverlayScrolling(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "Line1\nLine2\nLine3"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95
+	m.height = 30
+	m.syncSelectedBead()
+	m.showOverlay = true
+
+	// Scroll down in overlay
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.detailScroll != 1 {
+		t.Errorf("expected detailScroll 1 after j in overlay, got %d", m.detailScroll)
+	}
+
+	// Scroll up
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	if m.detailScroll != 0 {
+		t.Errorf("expected detailScroll 0 after k in overlay, got %d", m.detailScroll)
+	}
+}
+
+func TestLayout_RightExpandsInNarrowMode(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+	m := modelWithTree(beads, false)
+	m.width = 95
+	m.height = 30
+
+	// Right should expand, not open overlay
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	if m.showOverlay {
+		t.Error("Right key should expand, not open overlay")
+	}
+	visible := m.tree.FlattenVisible()
+	if len(visible) != 2 {
+		t.Errorf("expected 2 visible after Right expand, got %d", len(visible))
 	}
 }
