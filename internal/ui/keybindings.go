@@ -16,6 +16,7 @@ var keybindingRegistry = []Keybinding{
 	{Keys: "g", Description: "Go to top", Section: "NAVIGATION"},
 	{Keys: "G", Description: "Go to bottom", Section: "NAVIGATION"},
 	{Keys: "Tab", Description: "Switch focus (tree / detail)", Section: "NAVIGATION"},
+	{Keys: "Click", Description: "Switch focus to clicked panel", Section: "NAVIGATION"},
 
 	// Tree
 	{Keys: "Enter", Description: "Expand node / open overlay (narrow)", Section: "TREE"},

@@ -2559,3 +2559,133 @@ func TestRefresh_EmptyToPopulated(t *testing.T) {
 		t.Errorf("expected first bead selected, got %s", m.selectedBead.ID)
 	}
 }
+
+func TestMouse_ClickTreePaneSwitchesFocus(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.focusedPane = detailPane
+
+	// Click in tree panel region (x=10, within treeWidth which is 120*2/5=48)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 10, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus on tree pane after clicking in tree region")
+	}
+}
+
+func TestMouse_ClickDetailPaneSwitchesFocus(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.focusedPane = treePane
+
+	// Click in detail panel region (x=60, beyond treeWidth of 48)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != detailPane {
+		t.Error("expected focus on detail pane after clicking in detail region")
+	}
+}
+
+func TestMouse_ClickIgnoredInNarrowMode(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 95 // narrow mode
+	m.height = 30
+	m.ready = true
+	m.focusedPane = treePane
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus unchanged in narrow mode")
+	}
+}
+
+func TestMouse_ClickIgnoredInOverlayMode(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.showOverlay = true
+	m.focusedPane = treePane
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus unchanged in overlay mode")
+	}
+}
+
+func TestMouse_ClickIgnoredInHelpMode(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.showHelp = true
+	m.focusedPane = treePane
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus unchanged in help mode")
+	}
+}
+
+func TestMouse_RightClickIgnored(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.focusedPane = treePane
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonRight,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus unchanged on right click")
+	}
+}
+
+func TestMouse_ReleaseIgnored(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.focusedPane = treePane
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionRelease,
+	})
+	m = updated.(Model)
+	if m.focusedPane != treePane {
+		t.Error("expected focus unchanged on mouse release")
+	}
+}

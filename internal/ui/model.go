@@ -407,6 +407,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				)
 			}
 		}
+	case tea.MouseMsg:
+		// Only handle left-click press events
+		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
+			// Ignore clicks in overlay/filter/help/search modes
+			if m.showHelp || m.showOverlay || m.filtering || m.searching {
+				return m, nil
+			}
+			// In narrow mode, no panel split exists — ignore
+			if m.isNarrow() {
+				return m, nil
+			}
+			// Determine which panel was clicked based on X coordinate
+			tw := m.treeWidth()
+			if msg.X < tw {
+				m.focusedPane = treePane
+			} else {
+				m.focusedPane = detailPane
+			}
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

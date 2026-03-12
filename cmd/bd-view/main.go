@@ -36,7 +36,7 @@ func main() {
 
 			m := ui.New(cfg)
 			m.SetFetcher(fetcher)
-			p := tea.NewProgram(m, tea.WithAltScreen())
+			p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running TUI: %w", err)
 			}

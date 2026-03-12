@@ -6,6 +6,7 @@
     g         Go to top                                                                                                 
     G         Go to bottom                                                                                              
     Tab       Switch focus (tree / detail)                                                                              
+    Click     Switch focus to clicked panel                                                                             
                                                                                                                         
   TREE                                                                                                                  
     Enter     Expand node / open overlay (narrow)                                                                       
@@ -26,7 +27,6 @@
     q         Quit                                                                                                      
                                                                                                                         
   [Esc/?] Close  [j/k] Scroll                                                                                           
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
