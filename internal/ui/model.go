@@ -503,11 +503,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Handle mouse button release — copy selection to clipboard
+		// Handle mouse button release — finalize selection (no copy yet)
 		if msg.Button == tea.MouseButtonNone && msg.Action == tea.MouseActionRelease {
 			if m.selecting {
 				m.selecting = false
 				m.hasSelection = true
+			}
+			return m, nil
+		}
+
+		// Handle right-click — copy selection to clipboard
+		if msg.Button == tea.MouseButtonRight && msg.Action == tea.MouseActionPress {
+			if m.hasSelection {
 				text := m.extractSelectedText()
 				if text != "" {
 					lineCount := strings.Count(text, "\n") + 1

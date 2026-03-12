@@ -32,7 +32,8 @@ var keybindingRegistry = []Keybinding{
 
 	// Other
 	{Keys: "y", Description: "Copy bead ID to clipboard", Section: "OTHER"},
-	{Keys: "Drag", Description: "Select text in detail panel, copy on release", Section: "OTHER"},
+	{Keys: "Drag", Description: "Select text in detail panel", Section: "OTHER"},
+	{Keys: "Right-click", Description: "Copy selected text to clipboard", Section: "OTHER"},
 	{Keys: "Shift+Click", Description: "Terminal-native text selection (passthrough)", Section: "OTHER"},
 	{Keys: "r", Description: "Force refresh", Section: "OTHER"},
 	{Keys: "?", Description: "Show this help", Section: "OTHER"},

@@ -2734,7 +2734,7 @@ func TestMouse_ClickIgnoredInHelpMode(t *testing.T) {
 	}
 }
 
-func TestMouse_RightClickIgnored(t *testing.T) {
+func TestMouse_RightClickNoSelectionIgnored(t *testing.T) {
 	m := New(Config{Refresh: 2})
 	m.width = 120
 	m.height = 30
@@ -2749,6 +2749,67 @@ func TestMouse_RightClickIgnored(t *testing.T) {
 	m = updated.(Model)
 	if m.focusedPane != treePane {
 		t.Error("expected focus unchanged on right click")
+	}
+	if m.statusMsg != "" {
+		t.Error("expected no status message on right click without selection")
+	}
+}
+
+func TestMouse_RightClickCopiesSelection(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.hasSelection = true
+	m.selStartRow = 0
+	m.selStartCol = 0
+	m.selEndRow = 0
+	m.selEndCol = 5
+	m.detailLines = []string{"Hello World"}
+
+	updated, cmd := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonRight,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+	if m.statusMsg == "" {
+		t.Error("expected status message after right-click copy")
+	}
+	if cmd == nil {
+		t.Error("expected command batch for clipboard copy")
+	}
+}
+
+func TestMouse_ReleaseFinalizesSelectionWithoutCopy(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.selecting = true
+	m.selStartRow = 0
+	m.selStartCol = 0
+	m.selEndRow = 0
+	m.selEndCol = 5
+	m.detailLines = []string{"Hello World"}
+
+	updated, cmd := m.Update(tea.MouseMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseButtonNone,
+		Action: tea.MouseActionRelease,
+	})
+	m = updated.(Model)
+	if m.selecting {
+		t.Error("expected selecting to be false after release")
+	}
+	if !m.hasSelection {
+		t.Error("expected hasSelection to be true after release")
+	}
+	if m.statusMsg != "" {
+		t.Error("expected no status message on release (copy only on right-click)")
+	}
+	if cmd != nil {
+		t.Error("expected no command on release")
 	}
 }
 
