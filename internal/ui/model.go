@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/timoch/bd-view/internal/data"
 )
 
 // Config holds TUI configuration from CLI flags.
@@ -18,10 +19,11 @@ type Config struct {
 
 // Model is the top-level Bubble Tea model.
 type Model struct {
-	config Config
-	width  int
-	height int
-	ready  bool
+	config       Config
+	width        int
+	height       int
+	ready        bool
+	selectedBead *data.Bead
 }
 
 // New creates a new Model with the given config.
@@ -29,6 +31,12 @@ func New(cfg Config) Model {
 	return Model{
 		config: cfg,
 	}
+}
+
+// SetSelectedBead sets the bead displayed in the detail pane.
+// Pass nil to clear the selection.
+func (m *Model) SetSelectedBead(b *data.Bead) {
+	m.selectedBead = b
 }
 
 func (m Model) Init() tea.Cmd {
@@ -102,9 +110,73 @@ func (m Model) renderDetailPanel(width, height int) string {
 		Height(height).
 		PaddingLeft(1)
 
-	content := lipgloss.NewStyle().Faint(true).Render("Select a bead to view details")
+	if m.selectedBead == nil {
+		content := lipgloss.NewStyle().Faint(true).Render("Select a bead to view details")
+		return style.Render(content)
+	}
 
-	return style.Render(content)
+	b := m.selectedBead
+	var lines []string
+
+	// Title line: bead ID as pane title
+	titleStyle := lipgloss.NewStyle().Bold(true)
+	lines = append(lines, titleStyle.Render(b.ID))
+	lines = append(lines, strings.Repeat("─", width-2))
+
+	// Title field displayed prominently
+	if b.Title != "" {
+		lines = append(lines, fmt.Sprintf("Title:  %s", b.Title))
+	}
+
+	// Metadata row: Type, Status (with color), Priority, Owner
+	statusStr := m.colorStatus(b.Status)
+	lines = append(lines, fmt.Sprintf("Type:   %-12s Status: %s", b.IssueType, statusStr))
+	lines = append(lines, fmt.Sprintf("Priority: %-10d Owner: %s", b.Priority, b.Owner))
+
+	// Parent bead ID (if present)
+	if b.Parent != "" {
+		lines = append(lines, fmt.Sprintf("Parent: %s", b.Parent))
+	}
+
+	// Date fields (only non-empty)
+	var dateParts []string
+	if b.CreatedAt != nil {
+		dateParts = append(dateParts, fmt.Sprintf("Created: %s", b.CreatedAt.Format("2006-01-02")))
+	}
+	if b.UpdatedAt != nil {
+		dateParts = append(dateParts, fmt.Sprintf("Updated: %s", b.UpdatedAt.Format("2006-01-02")))
+	}
+	if b.ClosedAt != nil {
+		dateParts = append(dateParts, fmt.Sprintf("Closed: %s", b.ClosedAt.Format("2006-01-02")))
+	}
+	if len(dateParts) > 0 {
+		lines = append(lines, strings.Join(dateParts, "  "))
+	}
+
+	// Horizontal separator between header and body sections
+	lines = append(lines, strings.Repeat("─", width-2))
+
+	return style.Render(strings.Join(lines, "\n"))
+}
+
+// colorStatus returns the status string with appropriate color styling.
+func (m Model) colorStatus(status string) string {
+	var s lipgloss.Style
+	switch status {
+	case "open":
+		s = lipgloss.NewStyle()
+	case "in_progress":
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+	case "blocked":
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	case "deferred":
+		s = lipgloss.NewStyle().Faint(true)
+	case "closed":
+		s = lipgloss.NewStyle().Foreground(lipgloss.Color("34"))
+	default:
+		s = lipgloss.NewStyle()
+	}
+	return s.Render(status)
 }
 
 func (m Model) renderStatusBar() string {
