@@ -1206,6 +1206,359 @@ func TestLayout_OverlayScrolling(t *testing.T) {
 	}
 }
 
+// --- Search tests ---
+
+func TestSearch_SlashOpensSearchMode(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+
+	if !m.searching {
+		t.Error("expected searching mode to be active after /")
+	}
+}
+
+func TestSearch_TypingFiltersTree(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "epic-1", Title: "Build the widget", IssueType: "epic", Status: "open"},
+		{ID: "task-1", Title: "Fix the bug", IssueType: "task", Status: "open"},
+		{ID: "task-2", Title: "Add widget tests", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Enter search mode and type "widget"
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+
+	for _, r := range "widget" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected 2 matching beads, got %d", len(visible))
+	}
+	// Should contain epic-1 and task-2 (both have "widget" in title)
+	ids := make(map[string]bool)
+	for _, n := range visible {
+		ids[n.Bead.ID] = true
+	}
+	if !ids["epic-1"] {
+		t.Error("expected epic-1 to match 'widget'")
+	}
+	if !ids["task-2"] {
+		t.Error("expected task-2 to match 'widget'")
+	}
+}
+
+func TestSearch_CaseInsensitive(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "ABC-1", Title: "Alpha Beta", IssueType: "task", Status: "open"},
+		{ID: "xyz-1", Title: "Other", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Search for "abc" should match "ABC-1"
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "abc" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "ABC-1" {
+		t.Error("expected case-insensitive match on ID")
+	}
+}
+
+func TestSearch_MatchesByID(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "hep-ws-f6.3", Title: "Some title", IssueType: "task", Status: "open"},
+		{ID: "hep-ws-f7.1", Title: "Other title", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "f6" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 1 || visible[0].Bead.ID != "hep-ws-f6.3" {
+		t.Error("expected search by ID to match hep-ws-f6.3")
+	}
+}
+
+func TestSearch_AncestorsPreserved(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "epic-1", Title: "The Epic", IssueType: "epic", Status: "open"},
+		{ID: "task-1", Title: "Match me", IssueType: "task", Status: "open", Parent: "epic-1"},
+		{ID: "task-2", Title: "No match", IssueType: "task", Status: "open", Parent: "epic-1"},
+	}
+	m := modelWithTree(beads, true) // expand all so children are visible
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "Match me" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	visible := m.visibleNodes()
+	ids := make(map[string]bool)
+	for _, n := range visible {
+		ids[n.Bead.ID] = true
+	}
+	if !ids["task-1"] {
+		t.Error("expected matching bead task-1")
+	}
+	if !ids["epic-1"] {
+		t.Error("expected ancestor epic-1 preserved")
+	}
+	if ids["task-2"] {
+		t.Error("expected non-matching sibling task-2 to be filtered out")
+	}
+}
+
+func TestSearch_EscapeClearsSearch(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+		{ID: "b-2", Title: "Beta", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Enter search and type
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	m = updated.(Model)
+
+	if m.searchQuery != "A" {
+		t.Errorf("expected searchQuery 'A', got %q", m.searchQuery)
+	}
+
+	// Escape clears search and restores full tree
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.searching {
+		t.Error("expected searching to be false after Escape")
+	}
+	if m.searchQuery != "" {
+		t.Error("expected searchQuery to be cleared after Escape")
+	}
+
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected full tree restored, got %d visible", len(visible))
+	}
+}
+
+func TestSearch_EnterConfirmsSearch(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+		{ID: "b-2", Title: "Beta", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Enter search, type, then press Enter
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "Alpha" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if m.searching {
+		t.Error("expected searching to be false after Enter")
+	}
+	if m.searchQuery != "Alpha" {
+		t.Error("expected searchQuery to remain after Enter")
+	}
+
+	// Filter should still be active
+	visible := m.visibleNodes()
+	if len(visible) != 1 {
+		t.Errorf("expected 1 filtered result, got %d", len(visible))
+	}
+}
+
+func TestSearch_EscClearsActiveSearchOutsideSearchMode(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+		{ID: "b-2", Title: "Beta", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Search, confirm with Enter, then Escape to clear
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "Alpha" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	// Now press Escape to clear the active filter
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(Model)
+
+	if m.searchQuery != "" {
+		t.Error("expected searchQuery cleared by Escape outside search mode")
+	}
+	visible := m.visibleNodes()
+	if len(visible) != 2 {
+		t.Errorf("expected full tree after clearing search, got %d", len(visible))
+	}
+}
+
+func TestSearch_BackspaceRemovesChar(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "xyz" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	if m.searchQuery != "xyz" {
+		t.Fatalf("expected query 'xyz', got %q", m.searchQuery)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = updated.(Model)
+
+	if m.searchQuery != "xy" {
+		t.Errorf("expected query 'xy' after backspace, got %q", m.searchQuery)
+	}
+}
+
+func TestSearch_EmptyResultsMessage(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Search for something that doesn't exist
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "zzzzz" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	// Confirm search
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	output := m.View()
+	if !strings.Contains(output, "(no matching beads)") {
+		t.Error("expected 'no matching beads' message for empty search results")
+	}
+}
+
+func TestSearch_StatusBarShowsQuery(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Enter search mode
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "test" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+
+	// While in search mode, status bar should show search prompt
+	output := m.View()
+	if !strings.Contains(output, "Search: test") {
+		t.Error("expected status bar to show 'Search: test' during search input")
+	}
+
+	// Confirm search
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	output = m.View()
+	if !strings.Contains(output, `"test"`) {
+		t.Error("expected status bar to show active search query after confirming")
+	}
+}
+
+func TestSearch_NavigationWorksWhileFiltered(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", Title: "Alpha", IssueType: "task", Status: "open"},
+		{ID: "b-2", Title: "Alpha Two", IssueType: "task", Status: "open"},
+		{ID: "b-3", Title: "Beta", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Search for "Alpha"
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+	for _, r := range "Alpha" {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	// Should have 2 results, navigate between them
+	if m.selectedIdx != 0 {
+		t.Fatalf("expected selectedIdx 0, got %d", m.selectedIdx)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx 1 after j, got %d", m.selectedIdx)
+	}
+	if m.selectedBead == nil || m.selectedBead.ID != "b-2" {
+		t.Error("expected selected bead to be b-2")
+	}
+}
+
+func TestSearch_KeysIgnoredDuringSearchInput(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	// Enter search mode
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	m = updated.(Model)
+
+	// Pressing 'j' should add to query, not navigate
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.searchQuery != "j" {
+		t.Errorf("expected searchQuery 'j', got %q", m.searchQuery)
+	}
+	// Selection should have reset to 0 (search resets selection)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 during search, got %d", m.selectedIdx)
+	}
+}
+
 func TestLayout_RightExpandsInNarrowMode(t *testing.T) {
 	beads := []data.Bead{
 		{ID: "parent", IssueType: "epic", Status: "open"},

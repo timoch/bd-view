@@ -40,6 +40,8 @@ type Model struct {
 	focusedPane  paneID
 	detailScroll int
 	showOverlay  bool // full-screen detail overlay in narrow mode
+	searching    bool // true when search input is active
+	searchQuery  string
 }
 
 // New creates a new Model with the given config.
@@ -98,11 +100,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// In search mode, capture input
+		if m.searching {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.searching = false
+				m.searchQuery = ""
+				m.selectedIdx = 0
+				m.treeScroll = 0
+				m.syncSelectedBead()
+			case tea.KeyEnter:
+				m.searching = false
+				// Keep the search query active, just exit input mode
+			case tea.KeyBackspace:
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					m.selectedIdx = 0
+					m.treeScroll = 0
+					m.syncSelectedBead()
+				}
+			case tea.KeyRunes:
+				m.searchQuery += string(msg.Runes)
+				m.selectedIdx = 0
+				m.treeScroll = 0
+				m.syncSelectedBead()
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "esc":
-			// Clear any future filters/search (placeholder for now)
+			if m.searchQuery != "" {
+				m.searchQuery = ""
+				m.selectedIdx = 0
+				m.treeScroll = 0
+				m.syncSelectedBead()
+			}
+		case "/":
+			m.searching = true
+			return m, nil
 		case "tab":
 			if !m.isNarrow() {
 				if m.focusedPane == treePane {
@@ -167,12 +205,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// visibleNodes returns the current visible node list, or nil if no tree.
+// visibleNodes returns the current visible node list, filtered by search query if active.
 func (m *Model) visibleNodes() []*tree.Node {
 	if m.tree == nil {
 		return nil
 	}
-	return m.tree.FlattenVisible()
+	visible := m.tree.FlattenVisible()
+	if m.searchQuery == "" {
+		return visible
+	}
+	return m.filterBySearch(visible)
+}
+
+// filterBySearch returns only nodes that match the search query or are ancestors
+// of matching nodes, preserving hierarchy context.
+func (m *Model) filterBySearch(visible []*tree.Node) []*tree.Node {
+	query := strings.ToLower(m.searchQuery)
+
+	// First pass: find all matching bead IDs
+	matchIDs := make(map[string]bool)
+	for _, node := range visible {
+		id := strings.ToLower(node.Bead.ID)
+		title := strings.ToLower(node.Bead.Title)
+		if strings.Contains(id, query) || strings.Contains(title, query) {
+			matchIDs[node.Bead.ID] = true
+		}
+	}
+
+	// Second pass: collect ancestor IDs of all matches
+	ancestorIDs := make(map[string]bool)
+	for id := range matchIDs {
+		if node, ok := m.tree.ByID[id]; ok {
+			current := node
+			for current.Bead.Parent != "" {
+				ancestorIDs[current.Bead.Parent] = true
+				if parent, ok := m.tree.ByID[current.Bead.Parent]; ok {
+					current = parent
+				} else {
+					break
+				}
+			}
+		}
+	}
+
+	// Third pass: filter visible to only matches + ancestors
+	var filtered []*tree.Node
+	for _, node := range visible {
+		if matchIDs[node.Bead.ID] || ancestorIDs[node.Bead.ID] {
+			filtered = append(filtered, node)
+		}
+	}
+	return filtered
 }
 
 // syncSelectedBead updates the selected bead from the current tree selection
@@ -432,9 +515,13 @@ func (m Model) renderTreePanel(width, height int) string {
 		return style.Render(content)
 	}
 
-	visible := m.tree.FlattenVisible()
+	visible := m.visibleNodes()
 	if len(visible) == 0 {
-		content := header + "\n\n  (no beads loaded)"
+		emptyMsg := "(no beads loaded)"
+		if m.searchQuery != "" {
+			emptyMsg = "(no matching beads)"
+		}
+		content := header + "\n\n  " + emptyMsg
 		return style.Render(content)
 	}
 
@@ -804,8 +891,24 @@ func (m Model) colorStatus(status string) string {
 }
 
 func (m Model) renderStatusBar() string {
+	style := lipgloss.NewStyle().
+		Width(m.width).
+		Background(lipgloss.Color("237")).
+		Foreground(lipgloss.Color("252"))
+
+	// Search input mode
+	if m.searching {
+		bar := fmt.Sprintf("Search: %s_", m.searchQuery)
+		return style.Render(bar)
+	}
+
 	hints := []string{"[q] Quit", "[/] Search", "[f] Filter", "[?] Help"}
 	left := strings.Join(hints, "  ")
+
+	// Show active search query
+	if m.searchQuery != "" {
+		left = fmt.Sprintf("Search: %q  [Esc] Clear", m.searchQuery)
+	}
 
 	right := fmt.Sprintf("Refresh: %ds", m.config.Refresh)
 
@@ -815,11 +918,6 @@ func (m Model) renderStatusBar() string {
 	}
 
 	bar := left + strings.Repeat(" ", gap) + right
-
-	style := lipgloss.NewStyle().
-		Width(m.width).
-		Background(lipgloss.Color("237")).
-		Foreground(lipgloss.Color("252"))
 
 	return style.Render(bar)
 }
