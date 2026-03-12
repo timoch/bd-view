@@ -30,6 +30,7 @@ var keybindingRegistry = []Keybinding{
 	{Keys: "Esc", Description: "Clear search/filter, close overlay", Section: "SEARCH & FILTER"},
 
 	// Other
+	{Keys: "y", Description: "Copy bead ID to clipboard", Section: "OTHER"},
 	{Keys: "r", Description: "Force refresh", Section: "OTHER"},
 	{Keys: "?", Description: "Show this help", Section: "OTHER"},
 	{Keys: "q", Description: "Quit", Section: "OTHER"},

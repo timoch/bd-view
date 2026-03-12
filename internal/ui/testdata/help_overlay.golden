@@ -20,12 +20,12 @@
     Esc       Clear search/filter, close overlay                                                                        
                                                                                                                         
   OTHER                                                                                                                 
+    y         Copy bead ID to clipboard                                                                                 
     r         Force refresh                                                                                             
     ?         Show this help                                                                                            
     q         Quit                                                                                                      
                                                                                                                         
   [Esc/?] Close  [j/k] Scroll                                                                                           
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

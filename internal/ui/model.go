@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +21,9 @@ type beadsLoadedMsg struct {
 
 // tickMsg signals that the refresh interval has elapsed.
 type tickMsg time.Time
+
+// clearStatusMsg signals that the status bar message should be cleared.
+type clearStatusMsg struct{}
 
 // Config holds TUI configuration from CLI flags.
 type Config struct {
@@ -67,6 +71,7 @@ type Model struct {
 	beads        []data.Bead    // current in-memory bead list
 	lastRefresh  time.Time      // time of last successful refresh
 	nowFunc      func() time.Time // for testing; defaults to time.Now
+	statusMsg    string           // temporary status bar message (e.g., "Copied: bd-view-0ny.3")
 }
 
 // allTypes lists the bead types in display order.
@@ -149,6 +154,18 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// copyToClipboardCmd returns a command that copies text to the system clipboard
+// using the OSC 52 escape sequence. This works in most modern terminals and
+// over SSH with forwarding enabled.
+func copyToClipboardCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		b64 := base64.StdEncoding.EncodeToString([]byte(text))
+		seq := fmt.Sprintf("\033]52;c;%s\a", b64)
+		fmt.Print(seq)
+		return nil
+	}
+}
+
 // fetchBeadsCmd returns a command that fetches the bead list.
 func (m Model) fetchBeadsCmd() tea.Cmd {
 	fetcher := m.fetcher
@@ -171,7 +188,13 @@ func (m Model) tickCmd() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case clearStatusMsg:
+		m.statusMsg = ""
+		return m, nil
 	case tea.KeyMsg:
+		// Clear any temporary status message on keypress
+		m.statusMsg = ""
+
 		// Help overlay takes precedence over all other modes
 		if m.showHelp {
 			switch msg.String() {
@@ -370,6 +393,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.focusedPane == treePane {
 				m.collapseAllNodes()
+			}
+		case "y":
+			if m.focusedPane == treePane && m.selectedBead != nil {
+				id := m.selectedBead.ID
+				m.statusMsg = fmt.Sprintf("Copied: %s", id)
+				return m, tea.Batch(
+					copyToClipboardCmd(id),
+					tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+						return clearStatusMsg{}
+					}),
+				)
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -1344,6 +1378,11 @@ func (m Model) renderStatusBar() string {
 	if m.searching {
 		bar := fmt.Sprintf("Search: %s_", m.searchQuery)
 		return style.Render(bar)
+	}
+
+	// Temporary status message (e.g., clipboard confirmation)
+	if m.statusMsg != "" {
+		return style.Render(m.statusMsg)
 	}
 
 	hints := []string{"[q] Quit", "[/] Search", "[f] Filter", "[?] Help"}
