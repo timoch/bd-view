@@ -972,6 +972,28 @@ func (m Model) renderTreeRow(node *tree.Node, visible []*tree.Node, panelWidth i
 
 	base := fmt.Sprintf("%s%s%s  %s  %s", prefix, expandIndicator, node.Bead.ID, typeLabel, statusIcon)
 
+	// Append progress indicator for nodes with children
+	if len(node.Children) > 0 {
+		done := 0
+		total := len(node.Children)
+		for _, child := range node.Children {
+			if child.Bead.Status == "closed" {
+				done++
+			}
+		}
+		progress := fmt.Sprintf("[%d/%d]", done, total)
+		var progressStyle lipgloss.Style
+		switch {
+		case done == total:
+			progressStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2")) // green
+		case done == 0:
+			progressStyle = lipgloss.NewStyle().Faint(true)
+		default:
+			progressStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3")) // yellow
+		}
+		base = base + "  " + progressStyle.Render(progress)
+	}
+
 	// Append truncated title if there's enough space
 	if node.Bead.Title != "" && panelWidth > 0 {
 		baseWidth := lipgloss.Width(base)
