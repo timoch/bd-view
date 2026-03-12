@@ -351,7 +351,8 @@ func TestDetailPanel_ScrollResetOnSelection(t *testing.T) {
 }
 
 func TestRenderMarkdown_Bold(t *testing.T) {
-	result := renderMarkdown("This is **bold** text", 80)
+	m := New(Config{})
+	result := m.renderMarkdown("This is **bold** text", 80)
 	if !strings.Contains(result, "bold") {
 		t.Error("expected bold text in output")
 	}
@@ -361,8 +362,9 @@ func TestRenderMarkdown_Bold(t *testing.T) {
 }
 
 func TestRenderMarkdown_CodeBlock(t *testing.T) {
+	m := New(Config{})
 	input := "Before\n```\ncode line\n```\nAfter"
-	result := renderMarkdown(input, 80)
+	result := m.renderMarkdown(input, 80)
 	if !strings.Contains(result, "code line") {
 		t.Error("expected code line in output")
 	}
@@ -378,29 +380,78 @@ func TestRenderMarkdown_CodeBlock(t *testing.T) {
 }
 
 func TestRenderMarkdown_BulletList(t *testing.T) {
+	m := New(Config{})
 	input := "- Item one\n- Item two\n- Item three"
-	result := renderMarkdown(input, 80)
-	if !strings.Contains(result, "- Item one") {
+	result := m.renderMarkdown(input, 80)
+	if !strings.Contains(result, "Item one") {
 		t.Error("expected bullet items preserved")
 	}
 }
 
-func TestWrapLine(t *testing.T) {
-	result := wrapLine("short", 80)
-	if result != "short" {
-		t.Errorf("short line should not wrap, got %q", result)
+func TestRenderMarkdown_Empty(t *testing.T) {
+	m := New(Config{})
+	result := m.renderMarkdown("", 80)
+	if result != "" {
+		t.Errorf("expected empty string for empty input, got %q", result)
 	}
+	result = m.renderMarkdown("   \n  ", 80)
+	if result != "" {
+		t.Errorf("expected empty string for whitespace input, got %q", result)
+	}
+}
 
-	long := strings.Repeat("word ", 20)
-	result = wrapLine(long, 30)
-	lines := strings.Split(result, "\n")
-	if len(lines) < 2 {
-		t.Error("expected long line to wrap into multiple lines")
+func TestRenderMarkdown_Headings(t *testing.T) {
+	m := New(Config{})
+	result := m.renderMarkdown("# Heading\n\nSome text", 80)
+	if !strings.Contains(result, "Heading") {
+		t.Error("expected heading text in output")
 	}
-	for _, l := range lines {
-		if len(l) > 30 {
-			t.Errorf("wrapped line exceeds width: %q", l)
-		}
+	if !strings.Contains(result, "Some text") {
+		t.Error("expected body text in output")
+	}
+	if strings.Contains(result, "# ") {
+		t.Error("heading markers should be removed")
+	}
+}
+
+func TestRenderMarkdown_CheckboxList(t *testing.T) {
+	m := New(Config{})
+	input := "- [ ] unchecked\n- [x] checked"
+	result := m.renderMarkdown(input, 80)
+	if !strings.Contains(result, "unchecked") {
+		t.Error("expected unchecked item in output")
+	}
+	if !strings.Contains(result, "checked") {
+		t.Error("expected checked item in output")
+	}
+}
+
+func TestRenderMarkdown_InlineCode(t *testing.T) {
+	m := New(Config{})
+	result := m.renderMarkdown("Use `foo()` here", 80)
+	if !strings.Contains(result, "foo()") {
+		t.Error("expected inline code in output")
+	}
+}
+
+func TestRenderMarkdown_NarrowWidth(t *testing.T) {
+	m := New(Config{})
+	// Should not panic with very narrow width
+	result := m.renderMarkdown("Some text here", 5)
+	if !strings.Contains(result, "Some") {
+		t.Error("expected text in output even with narrow width")
+	}
+}
+
+func TestRenderMarkdown_NoColor(t *testing.T) {
+	m := New(Config{NoColor: true})
+	result := m.renderMarkdown("This is **bold** text", 80)
+	if !strings.Contains(result, "bold") {
+		t.Error("expected bold text in output")
+	}
+	// notty style preserves markdown markers as plain text
+	if !strings.Contains(result, "**bold**") {
+		t.Error("expected notty style to preserve bold markers")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/timoch/bd-view/internal/data"
 	"github.com/timoch/bd-view/internal/tree"
@@ -1149,7 +1150,7 @@ func (m Model) renderDetailPanel(width, height int) string {
 		headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 		lines = append(lines, "")
 		lines = append(lines, headingStyle.Render(sec.heading))
-		rendered := renderMarkdown(sec.content, contentWidth)
+		rendered := m.renderMarkdown(sec.content, contentWidth)
 		lines = append(lines, rendered)
 	}
 
@@ -1202,77 +1203,38 @@ func (m Model) renderDependencies(b *data.Bead) []string {
 	return lines
 }
 
-// renderMarkdown applies basic terminal-friendly markdown rendering.
-func renderMarkdown(text string, width int) string {
-	boldStyle := lipgloss.NewStyle().Bold(true)
-	codeBlockStyle := lipgloss.NewStyle().Faint(true)
-
-	var result []string
-	lines := strings.Split(text, "\n")
-	inCodeBlock := false
-
-	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
-			inCodeBlock = !inCodeBlock
-			continue
-		}
-
-		if inCodeBlock {
-			result = append(result, codeBlockStyle.Render("  "+line))
-			continue
-		}
-
-		// Wrap long lines
-		wrapped := wrapLine(line, width)
-		// Apply inline bold (**text**)
-		wrapped = renderInlineBold(wrapped, boldStyle)
-		result = append(result, wrapped)
+// renderMarkdown renders markdown content using glamour for the terminal.
+func (m Model) renderMarkdown(text string, width int) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	if width < 10 {
+		width = 10
 	}
 
-	return strings.Join(result, "\n")
-}
-
-// wrapLine wraps a single line to fit within the given width.
-func wrapLine(line string, width int) string {
-	if width <= 0 || len(line) <= width {
-		return line
+	styleName := "dark"
+	if m.config.NoColor {
+		styleName = "notty"
 	}
 
-	var result []string
-	for len(line) > width {
-		// Find last space before width
-		breakAt := strings.LastIndex(line[:width], " ")
-		if breakAt <= 0 {
-			breakAt = width
-		}
-		result = append(result, line[:breakAt])
-		line = line[breakAt:]
-		if len(line) > 0 && line[0] == ' ' {
-			line = line[1:]
-		}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styleName),
+		glamour.WithWordWrap(width),
+		glamour.WithColorProfile(lipgloss.ColorProfile()),
+	)
+	if err != nil {
+		return text
 	}
-	if line != "" {
-		result = append(result, line)
-	}
-	return strings.Join(result, "\n")
-}
 
-// renderInlineBold replaces **text** with bold-styled text.
-func renderInlineBold(text string, boldStyle lipgloss.Style) string {
-	for {
-		start := strings.Index(text, "**")
-		if start == -1 {
-			break
-		}
-		end := strings.Index(text[start+2:], "**")
-		if end == -1 {
-			break
-		}
-		end += start + 2
-		boldText := text[start+2 : end]
-		text = text[:start] + boldStyle.Render(boldText) + text[end+2:]
+	rendered, err := r.Render(text)
+	if err != nil {
+		return text
 	}
-	return text
+
+	// Trim trailing whitespace/newlines that glamour adds
+	rendered = strings.TrimRight(rendered, "\n ")
+
+	return rendered
 }
 
 // colorStatus returns the status string with appropriate color styling.
