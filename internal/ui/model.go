@@ -408,6 +408,76 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseMsg:
+		// Handle mouse wheel scroll events
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			scrollStep := 3
+			scrollUp := msg.Button == tea.MouseButtonWheelUp
+
+			// Help overlay: scroll help content
+			if m.showHelp {
+				if scrollUp {
+					m.helpScroll -= scrollStep
+					if m.helpScroll < 0 {
+						m.helpScroll = 0
+					}
+				} else {
+					m.helpScroll += scrollStep
+				}
+				return m, nil
+			}
+
+			// Filter overlay: ignore scroll (no scrollable content)
+			if m.filtering {
+				return m, nil
+			}
+
+			// Determine target panel
+			scrollTree := false
+			if m.showOverlay {
+				// Overlay mode: scroll detail content
+				scrollTree = false
+			} else if m.isNarrow() {
+				// Narrow mode: only tree visible
+				scrollTree = true
+			} else {
+				tw := m.treeWidth()
+				scrollTree = msg.X < tw
+			}
+
+			if scrollTree {
+				visible := m.visibleNodes()
+				viewportHeight := m.height - 1 // subtract header
+				if viewportHeight < 1 {
+					viewportHeight = 1
+				}
+				maxScroll := len(visible) - viewportHeight
+				if maxScroll < 0 {
+					maxScroll = 0
+				}
+				if scrollUp {
+					m.treeScroll -= scrollStep
+					if m.treeScroll < 0 {
+						m.treeScroll = 0
+					}
+				} else {
+					m.treeScroll += scrollStep
+					if m.treeScroll > maxScroll {
+						m.treeScroll = maxScroll
+					}
+				}
+			} else {
+				if scrollUp {
+					m.detailScroll -= scrollStep
+					if m.detailScroll < 0 {
+						m.detailScroll = 0
+					}
+				} else {
+					m.detailScroll += scrollStep
+				}
+			}
+			return m, nil
+		}
+
 		// Only handle left-click press events
 		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
 			// Ignore clicks in overlay/filter/help/search modes

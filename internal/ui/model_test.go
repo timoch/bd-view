@@ -2949,3 +2949,292 @@ func TestMouse_ClickTreeRowThenKeyboardNavigation(t *testing.T) {
 		t.Errorf("expected selectedIdx=2 after j key, got %d", m.selectedIdx)
 	}
 }
+
+// --- Mouse Wheel Scroll Tests ---
+
+func TestMouseWheel_TreePanelScrollDown(t *testing.T) {
+	// Create enough beads to require scrolling
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{ID: fmt.Sprintf("b-%d", i), IssueType: "task", Status: "open"})
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+	m.syncSelectedBead()
+
+	// Scroll down in tree panel (X within tree width)
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 10,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 3 {
+		t.Errorf("expected treeScroll=3 after wheel down, got %d", m.treeScroll)
+	}
+	// Selection should not change
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx=0 (unchanged), got %d", m.selectedIdx)
+	}
+	// Focus should not change
+	if m.focusedPane != treePane {
+		t.Error("expected focus to remain on tree pane")
+	}
+}
+
+func TestMouseWheel_TreePanelScrollUp(t *testing.T) {
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{ID: fmt.Sprintf("b-%d", i), IssueType: "task", Status: "open"})
+	}
+	m := modelWithTree(beads, false)
+	m.treeScroll = 10
+
+	// Scroll up in tree panel
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 10,
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 7 {
+		t.Errorf("expected treeScroll=7 after wheel up, got %d", m.treeScroll)
+	}
+}
+
+func TestMouseWheel_TreePanelScrollUpClampsToZero(t *testing.T) {
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{ID: fmt.Sprintf("b-%d", i), IssueType: "task", Status: "open"})
+	}
+	m := modelWithTree(beads, false)
+	m.treeScroll = 1 // less than scroll step of 3
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 10,
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 0 {
+		t.Errorf("expected treeScroll=0 (clamped), got %d", m.treeScroll)
+	}
+}
+
+func TestMouseWheel_TreePanelScrollDownClampsToMax(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.height = 30 // viewport > number of rows, so max scroll = 0
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 0 {
+		t.Errorf("expected treeScroll=0 (no content to scroll), got %d", m.treeScroll)
+	}
+}
+
+func TestMouseWheel_DetailPanelScrollDown(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "Long description"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+	m.syncSelectedBead()
+
+	// Scroll down in detail panel (X beyond tree width)
+	tw := m.treeWidth()
+	updated, _ := m.Update(tea.MouseMsg{
+		X: tw + 5, Y: 10,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.detailScroll != 3 {
+		t.Errorf("expected detailScroll=3 after wheel down, got %d", m.detailScroll)
+	}
+	// Focus should NOT change on scroll
+	if m.focusedPane != treePane {
+		t.Error("expected focus to remain on tree pane (scroll doesn't change focus)")
+	}
+}
+
+func TestMouseWheel_DetailPanelScrollUp(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.detailScroll = 10
+
+	tw := m.treeWidth()
+	updated, _ := m.Update(tea.MouseMsg{
+		X: tw + 5, Y: 10,
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.detailScroll != 7 {
+		t.Errorf("expected detailScroll=7 after wheel up, got %d", m.detailScroll)
+	}
+}
+
+func TestMouseWheel_DetailScrollUpClampsToZero(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.detailScroll = 2
+
+	tw := m.treeWidth()
+	updated, _ := m.Update(tea.MouseMsg{
+		X: tw + 5, Y: 10,
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.detailScroll != 0 {
+		t.Errorf("expected detailScroll=0 (clamped), got %d", m.detailScroll)
+	}
+}
+
+func TestMouseWheel_DoesNotChangeFocus(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.focusedPane = detailPane // start with detail focused
+
+	// Scroll in tree panel area
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.focusedPane != detailPane {
+		t.Error("expected focus to remain on detail pane after tree scroll")
+	}
+}
+
+func TestMouseWheel_DoesNotChangeSelection(t *testing.T) {
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{ID: fmt.Sprintf("b-%d", i), IssueType: "task", Status: "open"})
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 5
+	m.syncSelectedBead()
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.selectedIdx != 5 {
+		t.Errorf("expected selectedIdx=5 (unchanged), got %d", m.selectedIdx)
+	}
+}
+
+func TestMouseWheel_NarrowModeScrollsTree(t *testing.T) {
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{ID: fmt.Sprintf("b-%d", i), IssueType: "task", Status: "open"})
+	}
+	m := modelWithTree(beads, false)
+	m.width = 90 // narrow mode
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 50, Y: 10,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 3 {
+		t.Errorf("expected treeScroll=3 in narrow mode, got %d", m.treeScroll)
+	}
+}
+
+func TestMouseWheel_OverlayModeScrollsDetail(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open", Description: "content"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+	m.syncSelectedBead()
+	m.showOverlay = true
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.detailScroll != 3 {
+		t.Errorf("expected detailScroll=3 in overlay mode, got %d", m.detailScroll)
+	}
+}
+
+func TestMouseWheel_HelpOverlayScrollsHelp(t *testing.T) {
+	m := modelWithTree(nil, false)
+	m.showHelp = true
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.helpScroll != 3 {
+		t.Errorf("expected helpScroll=3, got %d", m.helpScroll)
+	}
+
+	// Scroll up
+	updated, _ = m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelUp,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.helpScroll != 0 {
+		t.Errorf("expected helpScroll=0 after scroll up, got %d", m.helpScroll)
+	}
+}
+
+func TestMouseWheel_FilterOverlayIgnored(t *testing.T) {
+	m := modelWithTree(nil, false)
+	m.filtering = true
+
+	updated, _ := m.Update(tea.MouseMsg{
+		X: 5, Y: 5,
+		Button: tea.MouseButtonWheelDown,
+		Action: tea.MouseActionPress,
+	})
+	m = updated.(Model)
+
+	if m.treeScroll != 0 {
+		t.Error("scroll should be ignored during filter overlay")
+	}
+	if m.detailScroll != 0 {
+		t.Error("scroll should be ignored during filter overlay")
+	}
+}
