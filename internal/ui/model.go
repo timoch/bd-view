@@ -34,6 +34,7 @@ type Model struct {
 	ready        bool
 	tree         *tree.Model
 	selectedIdx  int
+	treeScroll   int
 	selectedBead *data.Bead
 	dependents   []data.RelatedBead
 	focusedPane  paneID
@@ -91,10 +92,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "j", "down":
 			if m.focusedPane == detailPane {
 				m.detailScroll++
+			} else {
+				m.moveSelectionDown()
 			}
 		case "k", "up":
-			if m.focusedPane == detailPane && m.detailScroll > 0 {
-				m.detailScroll--
+			if m.focusedPane == detailPane {
+				if m.detailScroll > 0 {
+					m.detailScroll--
+				}
+			} else {
+				m.moveSelectionUp()
+			}
+		case "enter", "right":
+			if m.focusedPane == treePane {
+				m.expandSelected()
+			}
+		case "left":
+			if m.focusedPane == treePane {
+				m.collapseOrMoveToParent()
+			}
+		case "g":
+			if m.focusedPane == treePane {
+				m.goToTop()
+			}
+		case "G":
+			if m.focusedPane == treePane {
+				m.goToBottom()
+			}
+		case "e":
+			if m.focusedPane == treePane {
+				m.expandAllNodes()
+			}
+		case "c":
+			if m.focusedPane == treePane {
+				m.collapseAllNodes()
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -103,6 +134,194 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ready = true
 	}
 	return m, nil
+}
+
+// visibleNodes returns the current visible node list, or nil if no tree.
+func (m *Model) visibleNodes() []*tree.Node {
+	if m.tree == nil {
+		return nil
+	}
+	return m.tree.FlattenVisible()
+}
+
+// syncSelectedBead updates the selected bead from the current tree selection
+// and adjusts treeScroll to keep the selection visible.
+func (m *Model) syncSelectedBead() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		m.selectedBead = nil
+		m.dependents = nil
+		return
+	}
+	if m.selectedIdx >= len(visible) {
+		m.selectedIdx = len(visible) - 1
+	}
+	if m.selectedIdx < 0 {
+		m.selectedIdx = 0
+	}
+	b := visible[m.selectedIdx].Bead
+	m.selectedBead = &b
+	m.dependents = nil
+	m.detailScroll = 0
+	m.ensureSelectedVisible()
+}
+
+// ensureSelectedVisible adjusts treeScroll so the selected index is in the viewport.
+func (m *Model) ensureSelectedVisible() {
+	viewportHeight := m.height - 1 // subtract header line
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	if m.selectedIdx < m.treeScroll {
+		m.treeScroll = m.selectedIdx
+	}
+	if m.selectedIdx >= m.treeScroll+viewportHeight {
+		m.treeScroll = m.selectedIdx - viewportHeight + 1
+	}
+}
+
+func (m *Model) moveSelectionDown() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		return
+	}
+	if m.selectedIdx < len(visible)-1 {
+		m.selectedIdx++
+		m.syncSelectedBead()
+	}
+}
+
+func (m *Model) moveSelectionUp() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		return
+	}
+	if m.selectedIdx > 0 {
+		m.selectedIdx--
+		m.syncSelectedBead()
+	}
+}
+
+func (m *Model) expandSelected() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 || m.selectedIdx >= len(visible) {
+		return
+	}
+	node := visible[m.selectedIdx]
+	if len(node.Children) > 0 && !node.Expanded {
+		m.tree.ToggleExpand(node.Bead.ID)
+	}
+}
+
+func (m *Model) collapseOrMoveToParent() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 || m.selectedIdx >= len(visible) {
+		return
+	}
+	node := visible[m.selectedIdx]
+	// If expanded parent, collapse it
+	if len(node.Children) > 0 && node.Expanded {
+		m.tree.ToggleExpand(node.Bead.ID)
+		return
+	}
+	// Otherwise, move to parent
+	if node.Bead.Parent != "" {
+		for i, n := range visible {
+			if n.Bead.ID == node.Bead.Parent {
+				m.selectedIdx = i
+				m.syncSelectedBead()
+				return
+			}
+		}
+	}
+}
+
+func (m *Model) goToTop() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		return
+	}
+	if m.selectedIdx != 0 {
+		m.selectedIdx = 0
+		m.syncSelectedBead()
+	}
+}
+
+func (m *Model) goToBottom() {
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		return
+	}
+	last := len(visible) - 1
+	if m.selectedIdx != last {
+		m.selectedIdx = last
+		m.syncSelectedBead()
+	}
+}
+
+func (m *Model) expandAllNodes() {
+	if m.tree == nil {
+		return
+	}
+	m.tree.ExpandAll()
+	// Clamp selectedIdx to valid range
+	visible := m.visibleNodes()
+	if len(visible) == 0 {
+		m.selectedIdx = 0
+	} else if m.selectedIdx >= len(visible) {
+		m.selectedIdx = len(visible) - 1
+	}
+}
+
+func (m *Model) collapseAllNodes() {
+	if m.tree == nil {
+		return
+	}
+	// Remember selected bead ID to try to stay on it or its ancestor
+	visible := m.visibleNodes()
+	var selectedID string
+	if m.selectedIdx < len(visible) {
+		selectedID = visible[m.selectedIdx].Bead.ID
+	}
+	m.tree.CollapseAll()
+	// After collapsing, find the selected bead or its nearest ancestor in visible roots
+	newVisible := m.visibleNodes()
+	if len(newVisible) == 0 {
+		m.selectedIdx = 0
+		m.syncSelectedBead()
+		return
+	}
+	m.selectedIdx = 0
+	if selectedID != "" {
+		// Try to find the bead itself (it might be a root)
+		for i, n := range newVisible {
+			if n.Bead.ID == selectedID {
+				m.selectedIdx = i
+				break
+			}
+		}
+		// If not found, try to find the ancestor root
+		if m.selectedIdx == 0 && len(newVisible) > 0 {
+			if node, ok := m.tree.ByID[selectedID]; ok {
+				// Walk up to find a visible ancestor
+				current := node
+				for current.Bead.Parent != "" {
+					if parent, ok := m.tree.ByID[current.Bead.Parent]; ok {
+						current = parent
+					} else {
+						break
+					}
+				}
+				for i, n := range newVisible {
+					if n.Bead.ID == current.Bead.ID {
+						m.selectedIdx = i
+						break
+					}
+				}
+			}
+		}
+	}
+	m.syncSelectedBead()
 }
 
 func (m Model) View() string {
@@ -160,6 +379,12 @@ func (m Model) renderTreePanel(width, height int) string {
 
 	selectedStyle := lipgloss.NewStyle().Reverse(true)
 
+	// Viewport: available lines for tree rows (subtract 1 for header)
+	viewportHeight := height - 1
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+
 	var rows []string
 	for i, node := range visible {
 		row := m.renderTreeRow(node, visible)
@@ -167,6 +392,24 @@ func (m Model) renderTreePanel(width, height int) string {
 			row = selectedStyle.Render(row)
 		}
 		rows = append(rows, row)
+	}
+
+	// Apply tree scroll to keep selection visible
+	if len(rows) > viewportHeight {
+		if len(rows) <= viewportHeight {
+			// All rows fit, no scrolling needed
+		} else {
+			start := m.treeScroll
+			end := start + viewportHeight
+			if end > len(rows) {
+				end = len(rows)
+				start = end - viewportHeight
+			}
+			if start < 0 {
+				start = 0
+			}
+			rows = rows[start:end]
+		}
 	}
 
 	content := header + "\n" + strings.Join(rows, "\n")

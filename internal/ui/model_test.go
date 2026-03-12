@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -669,6 +670,321 @@ func TestStatusIcon_AllStatuses(t *testing.T) {
 		if !strings.Contains(result, c.icon) {
 			t.Errorf("statusIcon(%q) = %q, expected to contain %q", c.status, result, c.icon)
 		}
+	}
+}
+
+// --- Navigation tests ---
+
+func TestNavigation_MoveDown(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+
+	if m.selectedIdx != 0 {
+		t.Fatal("expected initial selection at 0")
+	}
+
+	// Move down with j
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx 1 after j, got %d", m.selectedIdx)
+	}
+
+	// Move down with down arrow
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(Model)
+	if m.selectedIdx != 2 {
+		t.Errorf("expected selectedIdx 2 after down, got %d", m.selectedIdx)
+	}
+}
+
+func TestNavigation_MoveUp(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 2
+
+	// Move up with k
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx 1 after k, got %d", m.selectedIdx)
+	}
+
+	// Move up with up arrow
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 after up, got %d", m.selectedIdx)
+	}
+}
+
+func TestNavigation_BoundaryTop(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+
+	// Move up at top should stay at 0
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 at top boundary, got %d", m.selectedIdx)
+	}
+}
+
+func TestNavigation_BoundaryBottom(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 1
+
+	// Move down at bottom should stay at 1
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	if m.selectedIdx != 1 {
+		t.Errorf("expected selectedIdx 1 at bottom boundary, got %d", m.selectedIdx)
+	}
+}
+
+func TestNavigation_ExpandCollapse(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+		{ID: "child-2", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+
+	// Parent is collapsed, children not visible
+	visible := m.tree.FlattenVisible()
+	if len(visible) != 1 {
+		t.Fatalf("expected 1 visible node when collapsed, got %d", len(visible))
+	}
+
+	// Press Enter to expand
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	visible = m.tree.FlattenVisible()
+	if len(visible) != 3 {
+		t.Fatalf("expected 3 visible nodes after expand, got %d", len(visible))
+	}
+
+	// Press Left to collapse
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(Model)
+
+	visible = m.tree.FlattenVisible()
+	if len(visible) != 1 {
+		t.Fatalf("expected 1 visible node after collapse, got %d", len(visible))
+	}
+}
+
+func TestNavigation_ExpandWithRight(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 0
+
+	// Press Right to expand
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	visible := m.tree.FlattenVisible()
+	if len(visible) != 2 {
+		t.Fatalf("expected 2 visible nodes after Right expand, got %d", len(visible))
+	}
+}
+
+func TestNavigation_LeftOnChildMovesToParent(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent"},
+	}
+	m := modelWithTree(beads, true)
+	m.selectedIdx = 1 // on child-1
+
+	// Press Left on child should move to parent
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = updated.(Model)
+
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 (parent) after Left on child, got %d", m.selectedIdx)
+	}
+	if m.selectedBead == nil || m.selectedBead.ID != "parent" {
+		t.Error("expected selected bead to be parent")
+	}
+}
+
+func TestNavigation_GoToTopBottom(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "open"},
+		{ID: "b-3", IssueType: "task", Status: "open"},
+		{ID: "b-4", IssueType: "task", Status: "open"},
+	}
+	m := modelWithTree(beads, false)
+	m.selectedIdx = 2
+
+	// G goes to bottom
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = updated.(Model)
+	if m.selectedIdx != 3 {
+		t.Errorf("expected selectedIdx 3 after G, got %d", m.selectedIdx)
+	}
+
+	// g goes to top
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = updated.(Model)
+	if m.selectedIdx != 0 {
+		t.Errorf("expected selectedIdx 0 after g, got %d", m.selectedIdx)
+	}
+}
+
+func TestNavigation_ExpandAll(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent-1", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent-1"},
+		{ID: "parent-2", IssueType: "epic", Status: "open"},
+		{ID: "child-2", IssueType: "task", Status: "open", Parent: "parent-2"},
+	}
+	m := modelWithTree(beads, false) // all collapsed
+
+	visible := m.tree.FlattenVisible()
+	if len(visible) != 2 {
+		t.Fatalf("expected 2 visible (roots only), got %d", len(visible))
+	}
+
+	// Press e to expand all
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = updated.(Model)
+
+	visible = m.tree.FlattenVisible()
+	if len(visible) != 4 {
+		t.Errorf("expected 4 visible after expand all, got %d", len(visible))
+	}
+}
+
+func TestNavigation_CollapseAll(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "parent-1", IssueType: "epic", Status: "open"},
+		{ID: "child-1", IssueType: "task", Status: "open", Parent: "parent-1"},
+		{ID: "parent-2", IssueType: "epic", Status: "open"},
+		{ID: "child-2", IssueType: "task", Status: "open", Parent: "parent-2"},
+	}
+	m := modelWithTree(beads, true) // all expanded
+	m.selectedIdx = 3               // on child-2
+
+	// Press c to collapse all
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = updated.(Model)
+
+	visible := m.tree.FlattenVisible()
+	if len(visible) != 2 {
+		t.Errorf("expected 2 visible after collapse all, got %d", len(visible))
+	}
+	// Should have moved to parent-2's root position
+	if m.selectedBead == nil || m.selectedBead.ID != "parent-2" {
+		id := ""
+		if m.selectedBead != nil {
+			id = m.selectedBead.ID
+		}
+		t.Errorf("expected selection on parent-2 after collapse, got %s", id)
+	}
+}
+
+func TestNavigation_DownUpdatesSelectedBead(t *testing.T) {
+	beads := []data.Bead{
+		{ID: "b-1", IssueType: "task", Status: "open"},
+		{ID: "b-2", IssueType: "task", Status: "closed"},
+	}
+	m := modelWithTree(beads, false)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+
+	if m.selectedBead == nil || m.selectedBead.ID != "b-2" {
+		t.Error("expected selectedBead to be b-2 after moving down")
+	}
+}
+
+func TestNavigation_EmptyTree(t *testing.T) {
+	m := modelWithTree([]data.Bead{}, false)
+
+	// These should not crash
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	_ = updated.(Model)
+}
+
+func TestNavigation_NoTreeSet(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	// These should not crash when tree is nil
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	_ = updated.(Model)
+}
+
+func TestNavigation_ScrollKeepsSelectionVisible(t *testing.T) {
+	// Create enough beads to exceed viewport
+	var beads []data.Bead
+	for i := 0; i < 50; i++ {
+		beads = append(beads, data.Bead{
+			ID:        fmt.Sprintf("b-%02d", i),
+			IssueType: "task",
+			Status:    "open",
+		})
+	}
+	m := modelWithTree(beads, false)
+	m.height = 12 // small viewport (11 rows for tree after header)
+
+	// Navigate to the bottom
+	for i := 0; i < 49; i++ {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = updated.(Model)
+	}
+
+	// treeScroll should have advanced so selected is visible
+	if m.treeScroll == 0 {
+		t.Error("expected treeScroll to advance when navigating past viewport")
+	}
+
+	// The rendered output should contain the last bead
+	output := m.View()
+	if !strings.Contains(output, "b-49") {
+		t.Error("expected b-49 to be visible after navigating to bottom")
 	}
 }
 
