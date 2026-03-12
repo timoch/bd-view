@@ -74,6 +74,17 @@ type Model struct {
 	nowFunc      func() time.Time // for testing; defaults to time.Now
 	statusMsg          string // temporary status bar message (e.g., "Copied: bd-view-0ny.3")
 	lastSelectedBeadID string // tracks bead ID to detect selection changes
+
+	// Text selection state for detail panel copy
+	selecting      bool // true while mouse drag is in progress
+	selStartRow    int  // selection start row (in detail content lines, 0-based)
+	selStartCol    int  // selection start column (in visible text, 0-based)
+	selEndRow      int  // selection end row
+	selEndCol      int  // selection end column
+	hasSelection   bool // true when a completed selection exists to render
+	detailLines    []string // rendered detail content lines (plain, post-scroll)
+	detailPanelX   int  // x offset of detail panel in the terminal
+	detailPanelY   int  // y offset of detail panel content (after header)
 }
 
 // allTypes lists the bead types in display order.
@@ -201,8 +212,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 		return m, nil
 	case tea.KeyMsg:
-		// Clear any temporary status message on keypress
+		// Clear any temporary status message and selection on keypress
 		m.statusMsg = ""
+		m.hasSelection = false
+		m.selecting = false
 
 		// Help overlay takes precedence over all other modes
 		if m.showHelp {
@@ -418,6 +431,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scroll events
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			// Clear selection on scroll
+			m.hasSelection = false
+			m.selecting = false
+
 			scrollStep := 3
 			scrollUp := msg.Button == tea.MouseButtonWheelUp
 
@@ -486,16 +503,81 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Only handle left-click press events
+		// Handle mouse button release — copy selection to clipboard
+		if msg.Button == tea.MouseButtonNone && msg.Action == tea.MouseActionRelease {
+			if m.selecting {
+				m.selecting = false
+				m.hasSelection = true
+				text := m.extractSelectedText()
+				if text != "" {
+					lineCount := strings.Count(text, "\n") + 1
+					m.statusMsg = fmt.Sprintf("Copied %d line(s)", lineCount)
+					return m, tea.Batch(
+						copyToClipboardCmd(text),
+						tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+							return clearStatusMsg{}
+						}),
+					)
+				}
+			}
+			return m, nil
+		}
+
+		// Handle mouse drag (motion with left button held) — text selection in detail panel
+		if msg.Action == tea.MouseActionMotion {
+			if m.selecting {
+				row, col := m.screenToDetailCoord(msg.X, msg.Y)
+				m.selEndRow = row
+				m.selEndCol = col
+			}
+			return m, nil
+		}
+
+		// Handle left-click press events
 		if msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress {
-			// Ignore clicks in overlay/filter/help/search modes
-			if m.showHelp || m.showOverlay || m.filtering || m.searching {
+			// Clear previous selection on any click
+			m.hasSelection = false
+			m.selecting = false
+
+			// Ignore clicks in filter/help/search modes
+			if m.showHelp || m.filtering || m.searching {
 				return m, nil
 			}
 
+			// Determine if click is in detail panel for text selection
+			inDetailPanel := false
+			if m.showOverlay {
+				// Overlay mode: detail takes full width
+				inDetailPanel = true
+			} else if !m.isNarrow() {
+				tw := m.treeWidth()
+				if msg.X >= tw+1 { // +1 for border
+					inDetailPanel = true
+				}
+			}
+
+			if inDetailPanel && m.selectedBead != nil {
+				// Start text selection in detail panel
+				m.selecting = true
+				row, col := m.screenToDetailCoord(msg.X, msg.Y)
+				m.selStartRow = row
+				m.selStartCol = col
+				m.selEndRow = row
+				m.selEndCol = col
+				if !m.showOverlay {
+					m.focusedPane = detailPane
+				}
+				return m, nil
+			}
+
+			// In overlay mode with no bead, ignore click
+			if m.showOverlay {
+				return m, nil
+			}
+
+			// Tree panel click handling
 			inTreePanel := false
 			if m.isNarrow() {
-				// In narrow mode, tree takes full width
 				inTreePanel = true
 			} else {
 				tw := m.treeWidth()
@@ -508,9 +590,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if inTreePanel {
 				m.focusedPane = treePane
-				// Calculate clicked row index: subtract 1 for header, add scroll offset
 				clickedRow := msg.Y - 1 + m.treeScroll
-				if msg.Y >= 1 { // Ignore clicks on header row
+				if msg.Y >= 1 {
 					visible := m.visibleNodes()
 					if clickedRow >= 0 && clickedRow < len(visible) {
 						m.selectedIdx = clickedRow
@@ -1315,12 +1396,54 @@ func (m Model) renderDetailPanel(width, height int) string {
 	if scrollOffset < 0 {
 		scrollOffset = 0
 	}
-	visible := allLines[scrollOffset:]
-	if len(visible) > height {
-		visible = visible[:height]
+	visibleLines := allLines[scrollOffset:]
+	if len(visibleLines) > height {
+		visibleLines = visibleLines[:height]
 	}
 
-	return style.Render(strings.Join(visible, "\n"))
+	// Store all content lines for text selection coordinate mapping
+	m.detailLines = allLines
+
+	// Apply selection highlighting if active
+	if m.selecting || m.hasSelection {
+		startRow, startCol, endRow, endCol := m.selectionNormalized()
+		selStyle := lipgloss.NewStyle().Reverse(true)
+		for i, line := range visibleLines {
+			contentRow := i + scrollOffset
+			if contentRow < startRow || contentRow > endRow {
+				continue
+			}
+			plain := stripAnsi(line)
+			lineRunes := []rune(plain)
+			fromCol := 0
+			toCol := len(lineRunes)
+			if contentRow == startRow {
+				fromCol = startCol
+			}
+			if contentRow == endRow {
+				toCol = endCol + 1
+			}
+			if fromCol < 0 {
+				fromCol = 0
+			}
+			if fromCol > len(lineRunes) {
+				fromCol = len(lineRunes)
+			}
+			if toCol > len(lineRunes) {
+				toCol = len(lineRunes)
+			}
+			if toCol <= fromCol {
+				continue
+			}
+			// Rebuild line with highlighted portion
+			before := string(lineRunes[:fromCol])
+			selected := selStyle.Render(string(lineRunes[fromCol:toCol]))
+			after := string(lineRunes[toCol:])
+			visibleLines[i] = before + selected + after
+		}
+	}
+
+	return style.Render(strings.Join(visibleLines, "\n"))
 }
 
 // renderDependencies returns lines showing dependency relationships.
@@ -1493,6 +1616,92 @@ func (m Model) renderFilterOverlay(width, height int) string {
 	lines = append(lines, lipgloss.NewStyle().Faint(true).Render("[Space] Toggle  [Enter/f] Apply  [Esc] Clear & Close"))
 
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// screenToDetailCoord converts screen (x, y) coordinates to detail content
+// row and column, accounting for panel offset, padding, and scroll.
+func (m Model) screenToDetailCoord(x, y int) (row, col int) {
+	// Calculate detail panel x offset
+	panelX := 0
+	if !m.showOverlay && !m.isNarrow() {
+		panelX = m.treeWidth() + 1 // +1 for border
+	}
+	// Detail panel has PaddingLeft(1)
+	col = x - panelX - 1
+	if col < 0 {
+		col = 0
+	}
+	// Row is relative to top of panel, plus scroll offset
+	row = y + m.detailScroll
+	if row < 0 {
+		row = 0
+	}
+	return row, col
+}
+
+// extractSelectedText returns the text within the current selection range
+// from the stored detail content lines.
+func (m Model) extractSelectedText() string {
+	if len(m.detailLines) == 0 {
+		return ""
+	}
+
+	// Normalize selection direction (start <= end)
+	startRow, startCol, endRow, endCol := m.selStartRow, m.selStartCol, m.selEndRow, m.selEndCol
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, startCol, endRow, endCol = endRow, endCol, startRow, startCol
+	}
+
+	var result strings.Builder
+	for r := startRow; r <= endRow && r < len(m.detailLines); r++ {
+		if r < 0 {
+			continue
+		}
+		line := stripAnsi(m.detailLines[r])
+		lineRunes := []rune(line)
+
+		fromCol := 0
+		toCol := len(lineRunes)
+		if r == startRow {
+			fromCol = startCol
+		}
+		if r == endRow {
+			toCol = endCol + 1
+		}
+		if fromCol < 0 {
+			fromCol = 0
+		}
+		if fromCol > len(lineRunes) {
+			fromCol = len(lineRunes)
+		}
+		if toCol > len(lineRunes) {
+			toCol = len(lineRunes)
+		}
+		if toCol < fromCol {
+			toCol = fromCol
+		}
+
+		if r > startRow {
+			result.WriteByte('\n')
+		}
+		result.WriteString(string(lineRunes[fromCol:toCol]))
+	}
+	return result.String()
+}
+
+// stripAnsi removes ANSI escape sequences from a string.
+func stripAnsi(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
+// selectionNormalized returns the selection range with start <= end.
+func (m Model) selectionNormalized() (startRow, startCol, endRow, endCol int) {
+	startRow, startCol = m.selStartRow, m.selStartCol
+	endRow, endCol = m.selEndRow, m.selEndCol
+	if startRow > endRow || (startRow == endRow && startCol > endCol) {
+		startRow, startCol, endRow, endCol = endRow, endCol, startRow, startCol
+	}
+	return
 }
 
 func (m Model) renderStatusBar() string {

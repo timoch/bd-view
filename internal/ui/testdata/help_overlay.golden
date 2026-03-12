@@ -1,34 +1,34 @@
   Help — Keybindings                                                                                                    
                                                                                                                         
   NAVIGATION                                                                                                            
-    j / Down  Move selection down                                                                                       
-    k / Up    Move selection up                                                                                         
-    g         Go to top                                                                                                 
-    G         Go to bottom                                                                                              
-    Tab       Switch focus (tree / detail)                                                                              
-    Click     Switch focus to clicked panel                                                                             
+    j / Down     Move selection down                                                                                    
+    k / Up       Move selection up                                                                                      
+    g            Go to top                                                                                              
+    G            Go to bottom                                                                                           
+    Tab          Switch focus (tree / detail)                                                                           
+    Click        Switch focus to clicked panel                                                                          
                                                                                                                         
   TREE                                                                                                                  
-    Enter     Expand node / open overlay (narrow)                                                                       
-    Right     Expand node                                                                                               
-    Left      Collapse node / go to parent                                                                              
-    e         Expand all nodes                                                                                          
-    c         Collapse all nodes                                                                                        
+    Enter        Expand node / open overlay (narrow)                                                                    
+    Right        Expand node                                                                                            
+    Left         Collapse node / go to parent                                                                           
+    e            Expand all nodes                                                                                       
+    c            Collapse all nodes                                                                                     
                                                                                                                         
   SEARCH & FILTER                                                                                                       
-    /         Search by ID, title, or content                                                                           
-    f         Open filter menu                                                                                          
-    Esc       Clear search/filter, close overlay                                                                        
+    /            Search by ID, title, or content                                                                        
+    f            Open filter menu                                                                                       
+    Esc          Clear search/filter, close overlay                                                                     
                                                                                                                         
   OTHER                                                                                                                 
-    y         Copy bead ID to clipboard                                                                                 
-    r         Force refresh                                                                                             
-    ?         Show this help                                                                                            
-    q         Quit                                                                                                      
+    y            Copy bead ID to clipboard                                                                              
+    Drag         Select text in detail panel, copy on release                                                           
+    Shift+Click  Terminal-native text selection (passthrough)                                                           
+    r            Force refresh                                                                                          
+    ?            Show this help                                                                                         
+    q            Quit                                                                                                   
                                                                                                                         
   [Esc/?] Close  [j/k] Scroll                                                                                           
-                                                                                                                        
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         
