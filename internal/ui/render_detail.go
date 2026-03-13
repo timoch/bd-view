@@ -117,9 +117,9 @@ func (m Model) buildDetailContentLines(width int) []string {
 	var result []string
 	for _, line := range allLines {
 		if ansi.StringWidth(line) > contentWidth {
-			wrapped := ansi.Wrap(shieldHyphens(line), contentWidth, "")
+			wrapped := ansi.Wrap(shieldWrapBreakpoints(line), contentWidth, "")
 			for _, wl := range strings.Split(wrapped, "\n") {
-				result = append(result, unshieldHyphens(wl))
+				result = append(result, unshieldWrapBreakpoints(wl))
 			}
 		} else {
 			result = append(result, line)
@@ -212,10 +212,10 @@ func (m Model) renderDependencies(b *data.Bead) []string {
 	return lines
 }
 
-// glamourStyle returns a glamour style config with margin set to 0.
-// The detail panel already has lipgloss PaddingLeft for indentation,
-// so glamour's own document margin must be zero to avoid double-indenting
-// and premature word-wrap breaks.
+// glamourStyle returns a glamour style config tuned for the detail panel.
+// - Document margin is zero (the panel already has lipgloss PaddingLeft).
+// - Inline code prefix/suffix spaces are removed so the background color
+//   doesn't bleed into surrounding whitespace.
 func glamourStyle(noColor bool) glamour.TermRendererOption {
 	var cfg gansi.StyleConfig
 	if noColor {
@@ -225,32 +225,90 @@ func glamourStyle(noColor bool) glamour.TermRendererOption {
 	}
 	zero := uint(glamourMarginLeft)
 	cfg.Document.Margin = &zero
+	// Remove the space padding around inline code spans.  The default
+	// DarkStyleConfig sets Prefix=" " Suffix=" " which extends the
+	// background color into the surrounding text.
+	cfg.Code.StylePrimitive.Prefix = ""
+	cfg.Code.StylePrimitive.Suffix = ""
 	return glamour.WithStyles(cfg)
 }
 
-// nonBreakingHyphen is U+2011 NON-BREAKING HYPHEN.  It renders identically to
-// a regular hyphen in terminals but charmbracelet/x/ansi.Wrap and Wordwrap
-// only treat ASCII hyphen (0x2D) as a breakpoint, so this survives wrapping.
-const nonBreakingHyphen = "\u2011"
+// wrapBreakpoints lists all non-whitespace characters that glamour and
+// charmbracelet/x/ansi treat as word-wrap breakpoints.  glamour passes
+// " ,.;-+|" to ansi.Wordwrap, and ansi.Wrap hard-codes hyphen.
+// We shield each of these with a visually identical Unicode substitute
+// so that wrapping only ever occurs on whitespace.
+// Substitutes use Private Use Area codepoints (U+E000–U+E005).  These are
+// guaranteed 1-cell wide, are not whitespace, and are not in glamour's
+// breakpoint set (" ,.;-+|").  They are never displayed — unshieldWrapBreakpoints
+// restores the originals before any output reaches the screen.
+var wrapShield = map[rune]rune{
+	'-': '\uE000',
+	',': '\uE001',
+	'.': '\uE002',
+	';': '\uE003',
+	'+': '\uE004',
+	'|': '\uE005',
+}
+
+// wrapUnshield is the reverse mapping for restoring originals.
+var wrapUnshield map[rune]rune
+
+func init() {
+	wrapUnshield = make(map[rune]rune, len(wrapShield))
+	for orig, sub := range wrapShield {
+		wrapUnshield[sub] = orig
+	}
+}
 
 // isWordRune reports whether r is a word character (\w equivalent).
 func isWordRune(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
 }
 
-// shieldHyphens replaces mid-word hyphens with a non-breaking hyphen so that
-// word-wrappers do not break compound words like "bd-view" or "copy-paste".
-// Uses a rune-by-rune scan instead of regex to correctly handle chains like
-// "a-b-c" where overlapping matches would miss the second hyphen.
-func shieldHyphens(s string) string {
+// prevVisibleRune returns the last visible (non-ANSI-escape) rune before
+// position i in the rune slice, or 0 if none exists.  This allows
+// shieldWrapBreakpoints to work on ANSI-styled text where escape sequences
+// like \x1b[0m sit between a word character and punctuation.
+func prevVisibleRune(runes []rune, i int) rune {
+	j := i - 1
+	for j >= 0 {
+		// Skip backwards over a complete ANSI escape: \x1b[...m
+		if runes[j] == 'm' {
+			// Walk back to find the opening \x1b
+			k := j - 1
+			for k >= 0 && runes[k] != '\x1b' {
+				k--
+			}
+			if k >= 0 && runes[k] == '\x1b' {
+				j = k - 1
+				continue
+			}
+		}
+		return runes[j]
+	}
+	return 0
+}
+
+// shieldWrapBreakpoints replaces mid-word breakpoint characters with Private
+// Use Area substitutes so that word-wrappers only break on whitespace.
+// A breakpoint is shielded when preceded by a word character, skipping over
+// any ANSI escape sequences (so styled text like "\x1b[1mword\x1b[0m," is
+// handled correctly).
+func shieldWrapBreakpoints(s string) string {
 	runes := []rune(s)
-	if len(runes) < 3 {
+	if len(runes) < 2 {
 		return s
 	}
 	var changed bool
-	for i := 1; i < len(runes)-1; i++ {
-		if runes[i] == '-' && isWordRune(runes[i-1]) && isWordRune(runes[i+1]) {
-			runes[i] = '\u2011'
+	for i, r := range runes {
+		sub, ok := wrapShield[r]
+		if !ok {
+			continue
+		}
+		// Shield if preceded by a word character (skipping ANSI escapes).
+		if prev := prevVisibleRune(runes, i); prev != 0 && isWordRune(prev) {
+			runes[i] = sub
 			changed = true
 		}
 	}
@@ -260,10 +318,27 @@ func shieldHyphens(s string) string {
 	return string(runes)
 }
 
-// unshieldHyphens restores non-breaking hyphens back to regular ASCII hyphens
-// for correct display and text extraction.
-func unshieldHyphens(s string) string {
-	return strings.ReplaceAll(s, nonBreakingHyphen, "-")
+// unshieldWrapBreakpoints restores shielded characters back to their ASCII
+// originals for correct display and text extraction.
+func unshieldWrapBreakpoints(s string) string {
+	// Fast path: check if any substitute is present.
+	hasAny := false
+	for _, r := range s {
+		if _, ok := wrapUnshield[r]; ok {
+			hasAny = true
+			break
+		}
+	}
+	if !hasAny {
+		return s
+	}
+	runes := []rune(s)
+	for i, r := range runes {
+		if orig, ok := wrapUnshield[r]; ok {
+			runes[i] = orig
+		}
+	}
+	return string(runes)
 }
 
 // renderMarkdown renders markdown content using glamour for the terminal.
@@ -288,7 +363,7 @@ func (m Model) renderMarkdown(text string, width int) string {
 		return text
 	}
 
-	rendered, err := r.Render(shieldHyphens(text))
+	rendered, err := r.Render(shieldWrapBreakpoints(text))
 	if err != nil {
 		return text
 	}
@@ -296,5 +371,5 @@ func (m Model) renderMarkdown(text string, width int) string {
 	// Trim trailing whitespace/newlines that glamour adds
 	rendered = strings.TrimRight(rendered, "\n ")
 
-	return unshieldHyphens(rendered)
+	return unshieldWrapBreakpoints(rendered)
 }

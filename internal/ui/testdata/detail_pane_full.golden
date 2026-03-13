@@ -19,7 +19,7 @@ proj-2  feat  ○  Feature: User auth             │ Parent: proj-1
                                                 │                                                                       
                                                 │ DESIGN                                                                
                                                 │                                                                       
-                                                │ Use [;m .github/workflows/ci.yml [0m.                                       
+                                                │ Use [;m.github/workflows/ci.yml[0m.                                         
                                                 │                                                                       
                                                 │   name: CI                                                            
                                                 │   on: push                                                            
