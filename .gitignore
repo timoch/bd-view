@@ -3,4 +3,7 @@
 .dolt/
 *.db
 .ralph-tui
+
+# Build artifacts
 bd-view
+dist/

@@ -13,12 +13,19 @@ import (
 	"github.com/timoch/bd-view/internal/ui"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	var cfg ui.Config
 
 	rootCmd := &cobra.Command{
-		Use:   "bd-view",
-		Short: "Terminal UI viewer for .beads databases",
+		Use:     "bd-view",
+		Short:   "Terminal UI viewer for .beads databases",
+		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Derive state file path from database path
 			if cfg.DBPath != "" {

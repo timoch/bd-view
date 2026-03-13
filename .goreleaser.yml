@@ -1,0 +1,26 @@
+version: 2
+
+builds:
+  - main: ./cmd/bd-view
+    binary: bd-view
+    ldflags:
+      - -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats:
+      - tar.gz
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  draft: false
