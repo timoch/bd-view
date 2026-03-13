@@ -3,3 +3,4 @@
 .dolt/
 *.db
 .ralph-tui
+bd-view
