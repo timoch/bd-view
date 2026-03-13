@@ -212,7 +212,7 @@ An alternative approach: use filesystem watching on the `.beads/` directory to t
 **so that** I can point it at different databases and control behavior.
 
 **Acceptance Criteria:**
-- `--db <path>` specifies the `.beads` database path (passed through to `bd` via `--db`).
+- Runs in a directory containing a `.beads` directory (auto-discovered by `bd`).
 - `--refresh <seconds>` sets the polling interval (default: 2).
 - `--filter <query>` applies an initial filter on launch (using `bd query` syntax).
 - `--type <type>` filters to a specific bead type on launch.
@@ -324,7 +324,7 @@ Must cover:
 
 ### Test Infrastructure
 
-- **Mock `bd` CLI:** Tests must not depend on a real `.beads` database. Provide a test helper that stubs `bd` output -- either by injecting a command executor interface, or by pointing `bd --db` at a fixture directory with known data.
+- **Mock `bd` CLI:** Tests must not depend on a real `.beads` database. Provide a test helper that stubs `bd` output by injecting a command executor interface.
 - **Golden files:** Store expected `View()` output as `.golden` files in `testdata/`. Use `teatest.RequireEqualOutput` or equivalent. Update goldens explicitly with a flag (`-update`).
 - **CI:** All three test levels run in CI on every push. No test may require a real terminal (TTY).
 

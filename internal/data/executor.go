@@ -17,18 +17,12 @@ type CommandExecutor interface {
 type BdExecutor struct {
 	// BdPath is the path to the bd binary. Defaults to "bd".
 	BdPath string
-	// DBPath is the optional --db flag value passed to all commands.
-	DBPath string
 }
 
 func (e *BdExecutor) Execute(ctx context.Context, args ...string) ([]byte, error) {
 	bdPath := e.BdPath
 	if bdPath == "" {
 		bdPath = "bd"
-	}
-
-	if e.DBPath != "" {
-		args = append([]string{"--db", e.DBPath}, args...)
 	}
 
 	cmd := exec.CommandContext(ctx, bdPath, args...)

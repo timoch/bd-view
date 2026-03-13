@@ -89,15 +89,16 @@ make install PREFIX=/usr/local
 
 ## Usage
 
+Run from a directory containing a `.beads` directory (or any parent):
+
 ```bash
-bd-view --db path/to/.beads/beads.db
+bd-view
 ```
 
 ### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--db` | | Path to `.beads` database |
 | `--refresh` | `2` | Refresh interval in seconds |
 | `--expand-all` | `false` | Start with all tree nodes expanded |
 | `--no-color` | `false` | Disable color output |

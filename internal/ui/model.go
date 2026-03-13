@@ -23,7 +23,6 @@ type clearStatusMsg struct{}
 
 // Config holds TUI configuration from CLI flags.
 type Config struct {
-	DBPath            string
 	Refresh           int
 	ExpandAll         bool
 	ExpandAllExplicit bool // true when --expand-all was explicitly passed

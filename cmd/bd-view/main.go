@@ -23,17 +23,18 @@ func main() {
 	var cfg ui.Config
 
 	rootCmd := &cobra.Command{
-		Use:     "bd-view",
-		Short:   "Terminal UI viewer for .beads databases",
+		Use:   "bd-view",
+		Short: "Terminal UI viewer for .beads databases",
+		Long:  "Run in a directory containing a .beads directory (or any parent).",
 		Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Derive state file path from database path
-			if cfg.DBPath != "" {
-				cfg.StatePath = filepath.Join(filepath.Dir(cfg.DBPath), "bd-view-state.json")
+			// Derive state file path from .beads directory
+			if beadsDir, err := findBeadsDir(); err == nil {
+				cfg.StatePath = filepath.Join(beadsDir, "bd-view-state.json")
 			}
 			cfg.ExpandAllExplicit = cmd.Flags().Changed("expand-all")
 
-			executor := &data.BdExecutor{DBPath: cfg.DBPath}
+			executor := &data.BdExecutor{}
 			fetcher := data.NewFetcher(executor)
 
 			m := ui.New(cfg)
@@ -52,7 +53,6 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVar(&cfg.DBPath, "db", "", "Path to .beads database")
 	rootCmd.Flags().IntVar(&cfg.Refresh, "refresh", 2, "Refresh interval in seconds")
 	rootCmd.Flags().BoolVar(&cfg.ExpandAll, "expand-all", false, "Start with all tree nodes expanded")
 	rootCmd.Flags().BoolVar(&cfg.NoColor, "no-color", false, "Disable color output")
@@ -61,5 +61,24 @@ func main() {
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+// findBeadsDir walks up from the current directory looking for a .beads directory.
+func findBeadsDir() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		candidate := filepath.Join(dir, ".beads")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf(".beads directory not found")
+		}
+		dir = parent
 	}
 }
