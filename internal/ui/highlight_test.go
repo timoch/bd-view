@@ -241,6 +241,95 @@ func TestDetailPanel_HighlightsDescriptionOnSearch(t *testing.T) {
 	}
 }
 
+func TestHighlightSelectionRange_PerCharANSI(t *testing.T) {
+	// Simulate per-character ANSI styling like lipgloss Bold+Underline produces.
+	// Each character is wrapped: \x1b[1;4mX\x1b[0m
+	// The embedded \x1b[0m resets should NOT cancel the selection highlight.
+	line := "\x1b[1;4mD\x1b[0m\x1b[1;4mE\x1b[0m\x1b[1;4mS\x1b[0m\x1b[1;4mC\x1b[0m"
+	result := highlightSelectionRange(line, 0, -1) // highlight all
+
+	// The reverse video code should be active for all visible characters.
+	// Strip everything except reverse-video on/off and visible chars to verify.
+	stripped := stripAnsi(result)
+	if stripped != "DESC" {
+		t.Errorf("expected visible text 'DESC', got %q", stripped)
+	}
+
+	// Each visible character should be within a \x1b[7m...\x1b[27m range.
+	// Count reverse-video-on codes: should be re-applied after each reset.
+	revOn := strings.Count(result, "\x1b[7m")
+	if revOn < 1 {
+		t.Error("expected at least one reverse-video-on code")
+	}
+	// The key test: ensure reverse video is active for ALL characters, not just the first.
+	// After the first \x1b[0m reset, \x1b[7m must be re-emitted.
+	// Check that 'E' is preceded by \x1b[7m (possibly with other ANSI in between).
+	eIdx := strings.Index(result, "E")
+	if eIdx == -1 {
+		t.Fatal("'E' not found in result")
+	}
+	// Find the last \x1b[7m before 'E'
+	before := result[:eIdx]
+	lastRevOn := strings.LastIndex(before, "\x1b[7m")
+	lastRevOff := strings.LastIndex(before, "\x1b[27m")
+	lastReset := strings.LastIndex(before, "\x1b[0m")
+	// Reverse video must be on: lastRevOn must be after both lastRevOff and lastReset
+	if lastRevOn < lastReset || lastRevOn < lastRevOff {
+		t.Errorf("reverse video not active before 'E': lastRevOn=%d, lastReset=%d, lastRevOff=%d\nresult: %q", lastRevOn, lastReset, lastRevOff, result)
+	}
+}
+
+func TestHighlightSelectionRange_GlamourStyledText(t *testing.T) {
+	// Glamour wraps paragraph content with color codes and resets between segments.
+	line := "\x1b[38;5;252m\x1b[0m  \x1b[38;5;252mHello world\x1b[0m"
+	result := highlightSelectionRange(line, 0, -1)
+
+	stripped := stripAnsi(result)
+	if stripped != "  Hello world" {
+		t.Errorf("expected '  Hello world', got %q", stripped)
+	}
+
+	// 'w' in "world" should have reverse video active
+	wIdx := strings.Index(result, "w")
+	if wIdx == -1 {
+		t.Fatal("'w' not found")
+	}
+	before := result[:wIdx]
+	lastRevOn := strings.LastIndex(before, "\x1b[7m")
+	lastReset := strings.LastIndex(before, "\x1b[0m")
+	if lastRevOn < lastReset {
+		t.Errorf("reverse video not active before 'w': lastRevOn=%d, lastReset=%d", lastRevOn, lastReset)
+	}
+}
+
+func TestHighlightSelectionRange_PartialRange(t *testing.T) {
+	// Per-char styled text, select only middle characters (cols 1-2)
+	line := "\x1b[1mA\x1b[0m\x1b[1mB\x1b[0m\x1b[1mC\x1b[0m\x1b[1mD\x1b[0m"
+	result := highlightSelectionRange(line, 1, 3) // highlight B and C
+
+	// A should NOT have reverse video; B and C should; D should not
+	aIdx := strings.Index(result, "A")
+	bIdx := strings.Index(result, "B")
+	dIdx := strings.Index(result, "D")
+
+	// Before A: no \x1b[7m
+	if strings.Contains(result[:aIdx], "\x1b[7m") {
+		t.Error("A should not be highlighted")
+	}
+	// Before B: \x1b[7m should be present
+	beforeB := result[:bIdx]
+	if !strings.Contains(beforeB, "\x1b[7m") {
+		t.Error("B should be highlighted")
+	}
+	// Before D: \x1b[27m should close selection
+	beforeD := result[:dIdx]
+	lastClose := strings.LastIndex(beforeD, "\x1b[27m")
+	lastOpen := strings.LastIndex(beforeD, "\x1b[7m")
+	if lastClose < lastOpen {
+		t.Error("selection should be closed before D")
+	}
+}
+
 func TestHighlight_ClearedWhenSearchCleared(t *testing.T) {
 	m := New(Config{Refresh: 2})
 	m.width = 120

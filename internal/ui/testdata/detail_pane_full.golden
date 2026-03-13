@@ -1,39 +1,39 @@
 Beads                                           │ proj-1.1                                                              
-▼ proj-1  epic  ◉  [1/3]  Epic: Project setup   │ ───────────────────────────────────────────────────────────────────── 
+▼ proj-1  epic  ◉  [1/3]  Epic: Project setup   │ ──────────────────────────────────────────────────────────────────────
 ├── proj-1.1  task  ✓  Set up CI pipeline       │ Title:  Set up CI pipeline                                            
 ├── proj-1.2  task  ○  Configure linting        │ Type:   task         Status: closed                                   
 └── proj-1.3  task  ✗  Write integration tests  │ Priority: 1          Owner: dev@test.com                              
 proj-2  feat  ○  Feature: User auth             │ Parent: proj-1                                                        
                                                 │ Created: 2026-03-10  Updated: 2026-03-11  Closed: 2026-03-11          
-                                                │ ───────────────────────────────────────────────────────────────────── 
+                                                │ ──────────────────────────────────────────────────────────────────────
                                                 │                                                                       
                                                 │ DESCRIPTION                                                           
                                                 │                                                                       
-                                                │   Configure GitHub Actions for CI.                                    
+                                                │  Configure GitHub Actions for CI.                                     
                                                 │                                                                       
-                                                │ [;1m[0m[;1m[0m  [;1mRequirements:[0m                                                       
+                                                │ [;1m[0m[;1m[0m [;1mRequirements:[0m                                                        
                                                 │                                                                       
-                                                │   • Build on push                                                     
-                                                │   • Run tests                                                         
-                                                │   • Lint check                                                        
+                                                │  • Build on push                                                      
+                                                │  • Run tests                                                          
+                                                │  • Lint check                                                         
                                                 │                                                                       
                                                 │ DESIGN                                                                
                                                 │                                                                       
-                                                │   Use [;m .github/workflows/ci.yml [0m.                                     
+                                                │  Use [;m .github/workflows/ci.yml [0m.                                      
                                                 │                                                                       
-                                                │     name: CI                                                          
-                                                │     on: push                                                          
+                                                │    name: CI                                                           
+                                                │    on: push                                                           
                                                 │                                                                       
                                                 │ ACCEPTANCE CRITERIA                                                   
                                                 │                                                                       
                                                 │                                                                       
-                                                │   [ ] CI runs on push                                                 
-                                                │   [ ] Tests pass                                                      
-                                                │   [ ] Lint passes                                                     
+                                                │  [ ] CI runs on push                                                  
+                                                │  [ ] Tests pass                                                       
+                                                │  [ ] Lint passes                                                      
                                                 │                                                                       
                                                 │ NOTES                                                                 
                                                 │                                                                       
-                                                │   See docs/ci.md for reference.                                       
+                                                │  See docs/ci.md for reference.                                        
                                                 │                                                                       
                                                 │ DEPENDENCIES                                                          
                                                 │   depends on: proj-1                                                  

@@ -119,6 +119,13 @@ func highlightSelectionRange(line string, fromCol, toCol int) string {
 			// Advance i by the number of runes in the ANSI sequence
 			ansiRunes := []rune(remaining[:loc[1]])
 			i += len(ansiRunes)
+			// Re-apply reverse video after any ANSI code that might reset it
+			// (e.g. \x1b[0m). Per-character styled text like lipgloss
+			// Bold+Underline emits a reset after every character, which would
+			// otherwise cancel the selection highlight.
+			if inSel {
+				result.WriteString(selOpen)
+			}
 			continue
 		}
 		shouldHL := visIdx >= fromCol && (toCol < 0 || visIdx < toCol)

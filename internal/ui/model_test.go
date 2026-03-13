@@ -3279,3 +3279,58 @@ func TestMouseWheel_FilterOverlayIgnored(t *testing.T) {
 		t.Error("scroll should be ignored during filter overlay")
 	}
 }
+
+func TestBuildDetailContentLines_WrapsLongLines(t *testing.T) {
+	m := New(Config{NoColor: true})
+	longTitle := strings.Repeat("A", 200)
+	m.selectedBead = &data.Bead{
+		ID:    "test-1",
+		Title: longTitle,
+	}
+
+	// Panel width 80: content area (width-1) = 79, so no line should exceed 79 visible chars.
+	panelWidth := 80
+	wrapWidth := panelWidth - 1
+	lines := m.buildDetailContentLines(panelWidth)
+
+	for i, line := range lines {
+		stripped := stripAnsi(line)
+		runeLen := len([]rune(stripped))
+		if runeLen > wrapWidth {
+			t.Errorf("line %d exceeds wrap width %d: len=%d, content=%q", i, wrapWidth, runeLen, stripped[:60])
+		}
+	}
+}
+
+func TestBuildDetailContentLines_SelectionMatchesRendered(t *testing.T) {
+	// Verify that buildDetailContentLines produces the same line count
+	// whether called from renderDetailPanel or refreshDetailLines context.
+	m := New(Config{Refresh: 2, NoColor: true})
+	m.width = 120 // wide mode (>= 100) so detail panel renders in split view
+	m.height = 40
+	m.ready = true
+
+	longDesc := strings.Repeat("word ", 50) // ~250 chars
+	m.selectedBead = &data.Bead{
+		ID:          "test-1",
+		Title:       strings.Repeat("T", 200),
+		Description: longDesc,
+	}
+
+	// Simulate refreshDetailLines (Update path)
+	m.refreshDetailLines()
+
+	// Simulate renderDetailPanel (View path) — same width calculation
+	detailWidth := m.width - m.treeWidth() - 1
+	viewLines := m.buildDetailContentLines(detailWidth)
+
+	if len(m.detailLines) != len(viewLines) {
+		t.Errorf("detailLines (%d) != viewLines (%d)", len(m.detailLines), len(viewLines))
+	}
+	for i := 0; i < len(m.detailLines) && i < len(viewLines); i++ {
+		if m.detailLines[i] != viewLines[i] {
+			t.Errorf("line %d differs:\n  detail: %q\n  view:   %q", i, stripAnsi(m.detailLines[i]), stripAnsi(viewLines[i]))
+			break
+		}
+	}
+}

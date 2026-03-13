@@ -5,7 +5,10 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	gansi "github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/timoch/bd-view/internal/data"
 )
@@ -20,7 +23,11 @@ func (m Model) buildDetailContentLines(width int) []string {
 
 	b := m.selectedBead
 	var lines []string
-	contentWidth := width - 2 // account for padding
+	// lipgloss Width includes PaddingLeft(1), so content area is width-1.
+	// All content (glamour, separators) uses this full width. Lines exceeding
+	// it are pre-wrapped to prevent lipgloss from introducing its own line
+	// breaks (which would desync detailLines from the display).
+	contentWidth := width - 1
 
 	// Title line: bead ID as pane title
 	titleStyle := lipgloss.NewStyle().Bold(true)
@@ -100,7 +107,23 @@ func (m Model) buildDetailContentLines(width int) []string {
 		lines = append(lines, depLines...)
 	}
 
-	return strings.Split(strings.Join(lines, "\n"), "\n")
+	// Flatten multi-line strings (e.g. glamour output) into individual lines.
+	allLines := strings.Split(strings.Join(lines, "\n"), "\n")
+
+	// Wrap any lines exceeding the lipgloss content area so that lipgloss
+	// doesn't introduce extra line breaks. Without this, lipgloss's internal
+	// cellbuf.Wrap creates visual lines not present in detailLines, causing
+	// selection highlight to misalign with displayed text.
+	var result []string
+	for _, line := range allLines {
+		if ansi.StringWidth(line) > contentWidth {
+			wrapped := ansi.Wrap(line, contentWidth, "")
+			result = append(result, strings.Split(wrapped, "\n")...)
+		} else {
+			result = append(result, line)
+		}
+	}
+	return result
 }
 
 // refreshDetailLines rebuilds detailLines for text selection coordinate mapping.
@@ -187,6 +210,22 @@ func (m Model) renderDependencies(b *data.Bead) []string {
 	return lines
 }
 
+// glamourStyle returns a glamour style config with margin set to 0.
+// The detail panel already has lipgloss PaddingLeft(1) for indentation,
+// so glamour's default margin=2 (4 chars total: left+right) wastes space
+// and causes unnecessary word-wrap breaks.
+func glamourStyle(noColor bool) glamour.TermRendererOption {
+	var cfg gansi.StyleConfig
+	if noColor {
+		cfg = styles.NoTTYStyleConfig
+	} else {
+		cfg = styles.DarkStyleConfig
+	}
+	one := uint(1)
+	cfg.Document.Margin = &one
+	return glamour.WithStyles(cfg)
+}
+
 // renderMarkdown renders markdown content using glamour for the terminal.
 func (m Model) renderMarkdown(text string, width int) string {
 	if strings.TrimSpace(text) == "" {
@@ -196,17 +235,12 @@ func (m Model) renderMarkdown(text string, width int) string {
 		width = 10
 	}
 
-	styleName := "dark"
-	if m.config.NoColor {
-		styleName = "notty"
-	}
-
 	profile := termenv.ColorProfile()
 	if m.config.NoColor {
 		profile = termenv.Ascii
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styleName),
+		glamourStyle(m.config.NoColor),
 		glamour.WithWordWrap(width),
 		glamour.WithColorProfile(profile),
 	)
