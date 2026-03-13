@@ -4,6 +4,17 @@
 *.db
 .ralph-tui
 
+# Beads data directory
+.beads/dolt/
+
 # Build artifacts
 bd-view
 dist/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
