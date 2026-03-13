@@ -91,3 +91,50 @@ func highlightSearchMatches(text, query string) string {
 
 	return result.String()
 }
+
+// highlightSelectionRange highlights visible characters from fromCol to toCol
+// (exclusive) in a line that may contain ANSI escape sequences. Uses reverse
+// video so it composes with existing styles. If toCol is -1, highlights to end
+// of line. Columns are 0-based visible character indices (rune count, not bytes).
+func highlightSelectionRange(line string, fromCol, toCol int) string {
+	if fromCol < 0 {
+		fromCol = 0
+	}
+
+	const selOpen = "\x1b[7m"   // reverse video
+	const selClose = "\x1b[27m" // reverse video off
+
+	runes := []rune(line)
+	var result strings.Builder
+	visIdx := 0 // visible character index (runes, skipping ANSI)
+	inSel := false
+	i := 0
+	for i < len(runes) {
+		// Check for ANSI escape sequence at current position
+		// Convert back to string from current rune position to check
+		remaining := string(runes[i:])
+		if loc := ansiRe.FindStringIndex(remaining); loc != nil && loc[0] == 0 {
+			// Write the ANSI sequence as-is
+			result.WriteString(remaining[:loc[1]])
+			// Advance i by the number of runes in the ANSI sequence
+			ansiRunes := []rune(remaining[:loc[1]])
+			i += len(ansiRunes)
+			continue
+		}
+		shouldHL := visIdx >= fromCol && (toCol < 0 || visIdx < toCol)
+		if shouldHL && !inSel {
+			result.WriteString(selOpen)
+			inSel = true
+		} else if !shouldHL && inSel {
+			result.WriteString(selClose)
+			inSel = false
+		}
+		result.WriteRune(runes[i])
+		visIdx++
+		i++
+	}
+	if inSel {
+		result.WriteString(selClose)
+	}
+	return result.String()
+}

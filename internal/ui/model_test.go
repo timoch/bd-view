@@ -2732,12 +2732,12 @@ func TestMouse_ReleaseCopiesSelectionAfterDrag(t *testing.T) {
 	m.width = 120
 	m.height = 30
 	m.ready = true
+	m.selectedBead = &data.Bead{ID: "test-1", Title: "Hello World", Description: "Some description"}
 	m.selecting = true
 	m.selStartRow = 0
 	m.selStartCol = 0
 	m.selEndRow = 0
 	m.selEndCol = 5
-	m.detailLines = []string{"Hello World"}
 
 	updated, cmd := m.Update(tea.MouseReleaseMsg{
 		X: 60, Y: 5,
@@ -2762,13 +2762,13 @@ func TestMouse_ReleaseNoCopyOnSimpleClick(t *testing.T) {
 	m.width = 120
 	m.height = 30
 	m.ready = true
+	m.selectedBead = &data.Bead{ID: "test-1", Title: "Hello World", Description: "Some description"}
 	m.selecting = true
 	// Start and end at same position (simple click, no drag)
 	m.selStartRow = 0
 	m.selStartCol = 3
 	m.selEndRow = 0
 	m.selEndCol = 3
-	m.detailLines = []string{"Hello World"}
 
 	updated, cmd := m.Update(tea.MouseReleaseMsg{
 		X: 60, Y: 5,
