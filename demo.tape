@@ -1,19 +1,24 @@
 # VHS demo tape for bd-view
 # Run: vhs demo.tape
-# Requires: bd-view binary, a .beads database with sample data
+# Requires: bd-view binary in PATH, a .beads database with data, bd CLI in PATH
 
-Output demo.gif
+Output "demo.gif"
 
 Set Shell "bash"
 Set FontSize 14
 Set Width 1200
 Set Height 700
-Set Theme "Tokyo Night"
+Set Theme "TokyoNight"
 
-# Launch bd-view with sample database
-Type "bd-view --db .beads/beads.db"
+# Ensure bd and bd-view are in PATH
+Type "export PATH=$HOME/.local/bin:$HOME/go/bin:$PATH"
 Enter
-Sleep 2s
+Sleep 500ms
+
+# Launch bd-view with the project database
+Type "bd-view"
+Enter
+Sleep 3s
 
 # Navigate down through the tree
 Sleep 500ms
@@ -25,13 +30,13 @@ Type "j"
 Sleep 400ms
 
 # Expand a node
-Type "l"
+Right
 Sleep 500ms
 Type "j"
 Sleep 400ms
 
 # Switch to detail panel
-Type@100ms "	"
+Tab
 Sleep 1s
 
 # Scroll detail panel
@@ -43,7 +48,7 @@ Type "j"
 Sleep 500ms
 
 # Switch back to tree
-Type@100ms "	"
+Tab
 Sleep 500ms
 
 # Expand all nodes
