@@ -3321,7 +3321,7 @@ func TestBuildDetailContentLines_SelectionMatchesRendered(t *testing.T) {
 	m.refreshDetailLines()
 
 	// Simulate renderDetailPanel (View path) — same width calculation
-	detailWidth := m.width - m.treeWidth() - 1
+	detailWidth := m.width - m.treeWidth() - treeBorderRight
 	viewLines := m.buildDetailContentLines(detailWidth)
 
 	if len(m.detailLines) != len(viewLines) {
@@ -3331,6 +3331,27 @@ func TestBuildDetailContentLines_SelectionMatchesRendered(t *testing.T) {
 		if m.detailLines[i] != viewLines[i] {
 			t.Errorf("line %d differs:\n  detail: %q\n  view:   %q", i, stripAnsi(m.detailLines[i]), stripAnsi(viewLines[i]))
 			break
+		}
+	}
+}
+
+func TestBuildDetailContentLines_PreservesHyphenatedWords(t *testing.T) {
+	m := New(Config{NoColor: true})
+	// Description with hyphenated words that should not be split across lines.
+	m.selectedBead = &data.Bead{
+		ID:          "test-1",
+		Description: "After the release is published, there are multiple ways to install bd-view. Each method should be documented with exact commands so users can copy-paste and go.",
+	}
+
+	// Use a narrow panel so wrapping kicks in, but wide enough that
+	// "bd-view" and "copy-paste" don't *need* to be split.
+	panelWidth := 60
+	lines := m.buildDetailContentLines(panelWidth)
+
+	joined := strings.Join(lines, "\n")
+	for _, word := range []string{"bd-view", "copy-paste"} {
+		if !strings.Contains(joined, word) {
+			t.Errorf("hyphenated word %q was split across lines; full output:\n%s", word, joined)
 		}
 	}
 }

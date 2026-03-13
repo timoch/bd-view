@@ -15,7 +15,7 @@ func (m Model) View() tea.View {
 	if !m.ready {
 		content = "Loading..."
 	} else if m.isTooSmall() {
-		content = fmt.Sprintf("Terminal too small (%dx%d). Minimum size: 80x24.", m.width, m.height)
+		content = fmt.Sprintf("Terminal too small (%dx%d). Minimum size: %dx%d.", m.width, m.height, minTermWidth, minTermHeight)
 	} else {
 		statusBar := m.renderStatusBar()
 		contentHeight := m.height - lipgloss.Height(statusBar)
@@ -37,7 +37,7 @@ func (m Model) View() tea.View {
 			content = lipgloss.JoinVertical(lipgloss.Left, treePanel, statusBar)
 		} else {
 			treeWidth := m.treeWidth()
-			detailWidth := m.width - treeWidth - 1
+			detailWidth := m.width - treeWidth - treeBorderRight
 
 			treePanel := m.renderTreePanel(treeWidth, contentHeight)
 			detailPanel := m.renderDetailPanel(detailWidth, contentHeight)
@@ -59,7 +59,7 @@ func (m Model) viewString() string {
 	}
 
 	if m.isTooSmall() {
-		return fmt.Sprintf("Terminal too small (%dx%d). Minimum size: 80x24.", m.width, m.height)
+		return fmt.Sprintf("Terminal too small (%dx%d). Minimum size: %dx%d.", m.width, m.height, minTermWidth, minTermHeight)
 	}
 
 	statusBar := m.renderStatusBar()
@@ -86,7 +86,7 @@ func (m Model) viewString() string {
 	}
 
 	treeWidth := m.treeWidth()
-	detailWidth := m.width - treeWidth - 1
+	detailWidth := m.width - treeWidth - treeBorderRight
 	treePanel := m.renderTreePanel(treeWidth, contentHeight)
 	detailPanel := m.renderDetailPanel(detailWidth, contentHeight)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, detailPanel)
@@ -94,9 +94,9 @@ func (m Model) viewString() string {
 }
 
 func (m Model) treeWidth() int {
-	w := m.width * 2 / 5
-	if w < 20 {
-		w = 20
+	w := m.width * treeWidthRatio / treeWidthDiv
+	if w < minTreeWidth {
+		w = minTreeWidth
 	}
 	if w > m.width {
 		w = m.width

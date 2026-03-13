@@ -8,10 +8,10 @@ func (m Model) screenToDetailCoord(x, y int) (row, col int) {
 	// Calculate detail panel x offset
 	panelX := 0
 	if !m.showOverlay && !m.isNarrow() {
-		panelX = m.treeWidth() + 1 // +1 for border
+		panelX = m.treeWidth() + treeBorderRight
 	}
-	// Detail panel has PaddingLeft(1)
-	col = x - panelX - 1
+	// Account for detail panel left padding
+	col = x - panelX - detailPaddingLeft
 	if col < 0 {
 		col = 0
 	}

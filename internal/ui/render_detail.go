@@ -23,11 +23,11 @@ func (m Model) buildDetailContentLines(width int) []string {
 
 	b := m.selectedBead
 	var lines []string
-	// lipgloss Width includes PaddingLeft(1), so content area is width-1.
+	// lipgloss Width includes PaddingLeft, so content area is reduced.
 	// All content (glamour, separators) uses this full width. Lines exceeding
 	// it are pre-wrapped to prevent lipgloss from introducing its own line
 	// breaks (which would desync detailLines from the display).
-	contentWidth := width - 1
+	contentWidth := detailContentWidth(width)
 
 	// Title line: bead ID as pane title
 	titleStyle := lipgloss.NewStyle().Bold(true)
@@ -117,8 +117,10 @@ func (m Model) buildDetailContentLines(width int) []string {
 	var result []string
 	for _, line := range allLines {
 		if ansi.StringWidth(line) > contentWidth {
-			wrapped := ansi.Wrap(line, contentWidth, "")
-			result = append(result, strings.Split(wrapped, "\n")...)
+			wrapped := ansi.Wrap(shieldHyphens(line), contentWidth, "")
+			for _, wl := range strings.Split(wrapped, "\n") {
+				result = append(result, unshieldHyphens(wl))
+			}
 		} else {
 			result = append(result, line)
 		}
@@ -131,7 +133,7 @@ func (m Model) buildDetailContentLines(width int) []string {
 func (m *Model) refreshDetailLines() {
 	detailWidth := m.width
 	if !m.showOverlay && !m.isNarrow() {
-		detailWidth = m.width - m.treeWidth() - 1
+		detailWidth = m.width - m.treeWidth() - treeBorderRight
 	}
 	m.detailLines = m.buildDetailContentLines(detailWidth)
 }
@@ -140,7 +142,7 @@ func (m Model) renderDetailPanel(width, height int) string {
 	style := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
-		PaddingLeft(1)
+		PaddingLeft(detailPaddingLeft)
 
 	if m.selectedBead == nil {
 		content := lipgloss.NewStyle().Faint(true).Render("Select a bead to view details")
@@ -211,9 +213,9 @@ func (m Model) renderDependencies(b *data.Bead) []string {
 }
 
 // glamourStyle returns a glamour style config with margin set to 0.
-// The detail panel already has lipgloss PaddingLeft(1) for indentation,
-// so glamour's default margin=2 (4 chars total: left+right) wastes space
-// and causes unnecessary word-wrap breaks.
+// The detail panel already has lipgloss PaddingLeft for indentation,
+// so glamour's own document margin must be zero to avoid double-indenting
+// and premature word-wrap breaks.
 func glamourStyle(noColor bool) glamour.TermRendererOption {
 	var cfg gansi.StyleConfig
 	if noColor {
@@ -221,9 +223,47 @@ func glamourStyle(noColor bool) glamour.TermRendererOption {
 	} else {
 		cfg = styles.DarkStyleConfig
 	}
-	one := uint(1)
-	cfg.Document.Margin = &one
+	zero := uint(glamourMarginLeft)
+	cfg.Document.Margin = &zero
 	return glamour.WithStyles(cfg)
+}
+
+// nonBreakingHyphen is U+2011 NON-BREAKING HYPHEN.  It renders identically to
+// a regular hyphen in terminals but charmbracelet/x/ansi.Wrap and Wordwrap
+// only treat ASCII hyphen (0x2D) as a breakpoint, so this survives wrapping.
+const nonBreakingHyphen = "\u2011"
+
+// isWordRune reports whether r is a word character (\w equivalent).
+func isWordRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
+}
+
+// shieldHyphens replaces mid-word hyphens with a non-breaking hyphen so that
+// word-wrappers do not break compound words like "bd-view" or "copy-paste".
+// Uses a rune-by-rune scan instead of regex to correctly handle chains like
+// "a-b-c" where overlapping matches would miss the second hyphen.
+func shieldHyphens(s string) string {
+	runes := []rune(s)
+	if len(runes) < 3 {
+		return s
+	}
+	var changed bool
+	for i := 1; i < len(runes)-1; i++ {
+		if runes[i] == '-' && isWordRune(runes[i-1]) && isWordRune(runes[i+1]) {
+			runes[i] = '\u2011'
+			changed = true
+		}
+	}
+	if !changed {
+		return s
+	}
+	return string(runes)
+}
+
+// unshieldHyphens restores non-breaking hyphens back to regular ASCII hyphens
+// for correct display and text extraction.
+func unshieldHyphens(s string) string {
+	return strings.ReplaceAll(s, nonBreakingHyphen, "-")
 }
 
 // renderMarkdown renders markdown content using glamour for the terminal.
@@ -248,7 +288,7 @@ func (m Model) renderMarkdown(text string, width int) string {
 		return text
 	}
 
-	rendered, err := r.Render(text)
+	rendered, err := r.Render(shieldHyphens(text))
 	if err != nil {
 		return text
 	}
@@ -256,5 +296,5 @@ func (m Model) renderMarkdown(text string, width int) string {
 	// Trim trailing whitespace/newlines that glamour adds
 	rendered = strings.TrimRight(rendered, "\n ")
 
-	return rendered
+	return unshieldHyphens(rendered)
 }

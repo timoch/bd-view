@@ -12,7 +12,7 @@ func (m Model) renderHelpOverlay(width, height int) string {
 	style := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
-		PaddingLeft(2)
+		PaddingLeft(overlayPaddingLeft)
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorAccentPrimary)
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)
@@ -66,7 +66,7 @@ func (m Model) renderFilterOverlay(width, height int) string {
 	style := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
-		PaddingLeft(2)
+		PaddingLeft(overlayPaddingLeft)
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorAccentPrimary)
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true)

@@ -197,10 +197,10 @@ func (m Model) tickCmd() tea.Cmd {
 
 // isNarrow returns true when the terminal is too narrow for side-by-side layout.
 func (m Model) isNarrow() bool {
-	return m.width < 100
+	return m.width < narrowWidth
 }
 
 // isTooSmall returns true when the terminal is below the minimum supported size.
 func (m Model) isTooSmall() bool {
-	return m.width < 80 || m.height < 24
+	return m.width < minTermWidth || m.height < minTermHeight
 }
