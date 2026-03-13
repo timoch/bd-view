@@ -1,11 +1,22 @@
 # bd-view
 
-Terminal UI viewer for `.beads` databases. Provides an interactive tree-based interface for browsing and inspecting beads issues.
+A terminal UI for browsing `.beads` databases.
 
-## Prerequisites
+<!-- To regenerate the demo GIF: vhs demo.tape -->
+![bd-view demo](demo.gif)
 
-- **[bd](https://github.com/timoch/bd)** CLI must be installed and available in `PATH`
-- Terminal with Unicode support and 256-color capability
+## Features
+
+- **Tree navigation** -- hierarchical parent-child view with expand/collapse
+- **Split-panel layout** -- tree on the left, detail on the right (auto-stacks in narrow terminals)
+- **Rich detail view** -- markdown-rendered description, design, acceptance criteria, and notes
+- **Search** -- fuzzy find by ID, title, or content with match highlighting
+- **Filter** -- narrow by bead type and status via interactive menu
+- **Real-time refresh** -- polls for changes with configurable interval, preserves UI state
+- **Clipboard** -- copy bead IDs or select and copy text from the detail panel
+- **Read-only** -- safe to use on any database, never writes
+- **Vim keybindings** -- `j`/`k`, `g`/`G`, `/` search, and more
+- **Mouse support** -- click to focus, scroll, drag to select text
 
 ## Installation
 
@@ -93,3 +104,56 @@ bd-view --db path/to/.beads/beads.db
 | `--type` | | Filter by bead type (repeatable) |
 | `--status` | | Filter by bead status (repeatable) |
 | `--version` | | Show version information |
+
+## Keybindings
+
+### Navigation
+
+| Key | Action |
+|-----|--------|
+| `j` / `Down` | Move selection down |
+| `k` / `Up` | Move selection up |
+| `g` | Go to top |
+| `G` | Go to bottom |
+| `Tab` | Switch focus (tree / detail) |
+| `Click` | Switch focus to clicked panel |
+
+### Tree
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Expand node / open overlay (narrow mode) |
+| `Right` | Expand node |
+| `Left` | Collapse node / go to parent |
+| `e` | Expand all nodes |
+| `c` | Collapse all nodes |
+
+### Search & Filter
+
+| Key | Action |
+|-----|--------|
+| `/` | Search by ID, title, or content |
+| `f` | Open filter menu |
+| `Esc` | Clear search/filter, close overlay |
+
+### Other
+
+| Key | Action |
+|-----|--------|
+| `y` | Copy bead ID to clipboard |
+| `Drag` | Select text in detail panel |
+| `Right-click` | Copy selection and clear |
+| `Shift+Click` | Terminal-native text selection |
+| `r` | Force refresh |
+| `?` | Show help overlay |
+| `q` / `Ctrl+C` | Quit |
+
+## Requirements
+
+- **Go 1.25+** (for building from source)
+- **[bd](https://github.com/timoch/bd)** CLI installed and in `PATH`
+- Terminal with Unicode support and 256-color capability (minimum 80x24)
+
+## License
+
+[MIT](LICENSE)
