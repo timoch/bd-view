@@ -308,24 +308,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseReleaseMsg:
 		// Refresh detail lines for text extraction (View() value receiver loses them)
 		m.refreshDetailLines()
-		// Handle mouse button release — finalize selection and copy if dragged
+		// Handle mouse button release — finalize selection (copy happens on right-click)
 		if m.selecting {
 			m.selecting = false
-			// Only copy if selection spans more than zero characters (drag, not just click)
 			startRow, startCol, endRow, endCol := m.selectionNormalized()
 			if startRow != endRow || startCol != endCol {
 				m.hasSelection = true
-				text := m.extractSelectedText()
-				if text != "" {
-					lineCount := strings.Count(text, "\n") + 1
-					m.statusMsg = fmt.Sprintf("Copied %d line(s)", lineCount)
-					return m, tea.Batch(
-						copyToClipboardCmd(text),
-						tea.Tick(3*time.Second, func(time.Time) tea.Msg {
-							return clearStatusMsg{}
-						}),
-					)
-				}
 			}
 		}
 		return m, nil
@@ -340,6 +328,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.MouseClickMsg:
+		// Handle right-click — copy selection to clipboard and clear it
+		if msg.Button == tea.MouseRight && m.hasSelection {
+			m.refreshDetailLines()
+			text := m.extractSelectedText()
+			m.hasSelection = false
+			m.selecting = false
+			if text != "" {
+				lineCount := strings.Count(text, "\n") + 1
+				m.statusMsg = fmt.Sprintf("Copied %d line(s)", lineCount)
+				return m, tea.Batch(
+					copyToClipboardCmd(text),
+					tea.Tick(3*time.Second, func(time.Time) tea.Msg {
+						return clearStatusMsg{}
+					}),
+				)
+			}
+			return m, nil
+		}
+
 		// Handle left-click press events
 		if msg.Button == tea.MouseLeft {
 			// Clear previous selection on any click

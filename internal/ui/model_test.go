@@ -2727,7 +2727,7 @@ func TestMouse_ClickIgnoredInHelpMode(t *testing.T) {
 	}
 }
 
-func TestMouse_ReleaseCopiesSelectionAfterDrag(t *testing.T) {
+func TestMouse_ReleaseFinalizesSelectionWithoutCopy(t *testing.T) {
 	m := New(Config{Refresh: 2})
 	m.width = 120
 	m.height = 30
@@ -2747,10 +2747,38 @@ func TestMouse_ReleaseCopiesSelectionAfterDrag(t *testing.T) {
 		t.Error("expected selecting to be false after release")
 	}
 	if !m.hasSelection {
-		t.Error("expected hasSelection to be true after release")
+		t.Error("expected hasSelection to be true after drag release")
 	}
-	if m.statusMsg == "" {
-		t.Error("expected status message after drag-release copy")
+	if m.statusMsg != "" {
+		t.Error("expected no status message on release (copy happens on right-click)")
+	}
+	if cmd != nil {
+		t.Error("expected no command on release (copy happens on right-click)")
+	}
+}
+
+func TestMouse_RightClickCopiesAndClearsSelection(t *testing.T) {
+	m := New(Config{Refresh: 2})
+	m.width = 120
+	m.height = 30
+	m.ready = true
+	m.selectedBead = &data.Bead{ID: "test-1", Title: "Hello World", Description: "Some description"}
+	m.hasSelection = true
+	m.selStartRow = 0
+	m.selStartCol = 0
+	m.selEndRow = 0
+	m.selEndCol = 5
+
+	updated, cmd := m.Update(tea.MouseClickMsg{
+		X: 60, Y: 5,
+		Button: tea.MouseRight,
+	})
+	m = updated.(Model)
+	if m.hasSelection {
+		t.Error("expected hasSelection to be false after right-click copy")
+	}
+	if m.selecting {
+		t.Error("expected selecting to be false after right-click copy")
 	}
 	if cmd == nil {
 		t.Error("expected command batch for clipboard copy")
